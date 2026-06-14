@@ -1,0 +1,20 @@
+[project]
+name = "exam-review"
+version = "1.0.0"
+description = "MCP Server for AI-powered exam review planning"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0",
+    "pdfplumber>=0.10.0",
+    "python-docx>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+
+[project.scripts]
+exam-review = "exam_review.server:main"
+
+[tool.setuptools.packages.find]
+include = ["exam_review*"]
