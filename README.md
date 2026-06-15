@@ -13,6 +13,26 @@ cd exam-ai
 pip install -e .
 ```
 
+### Configure in Hermes Agent
+
+Add to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  exam-review:
+    command: python
+    args: ["-m", "exam_review.server"]
+    enabled: true
+```
+
+Or use the CLI:
+
+```bash
+hermes mcp add exam-review --command python --args "-m,exam_review.server"
+```
+
+Then restart Hermes Agent. The 6 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
+
 ### Configure Claude Code
 
 Add to `~/.claude/settings.json`:
@@ -109,6 +129,26 @@ Persisted to `~/.exam-review/state.json`. Resumes automatically on next session.
 cd exam-ai
 pip install -e .
 ```
+
+### 在 Hermes Agent 中配置
+
+添加到 `~/.hermes/config.yaml`：
+
+```yaml
+mcp_servers:
+  exam-review:
+    command: python
+    args: ["-m", "exam_review.server"]
+    enabled: true
+```
+
+或使用 CLI 命令：
+
+```bash
+hermes mcp add exam-review --command python --args "-m,exam_review.server"
+```
+
+然后重启 Hermes Agent，6 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
 
 ### 配置 Claude Code
 
