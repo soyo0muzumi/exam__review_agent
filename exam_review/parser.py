@@ -1,14 +1,12 @@
-"""Parse PDF, DOCX, and MD files into chapter-based text chunks.
+"""Parse text into chapter-based chunks.
 
-Uses pdfplumber for PDF (no OCR dependency). If extraction fails or yields
-very little text, returns an error message and suggests the user provide a
-text-selectable version.
+Receives plain text (LLM extracts from PDF/DOCX via pdf-mcp or other tools)
+and splits it by chapter headers.
 """
 
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 CHAPTER_PATTERN = re.compile(
     r"(第[一二三四五六七八九十百\d]+章|Chapter\s+\d+|第[一二三四五六七八九十百\d]+节)",
@@ -16,49 +14,16 @@ CHAPTER_PATTERN = re.compile(
 )
 
 
-def parse_file(path: Path) -> list[dict]:
-    """Parse a file and return list of {name, text} chapters."""
-    suffix = path.suffix.lower()
+def parse_text(text: str) -> list[dict]:
+    """Parse plain text and return list of {name, text} chapters.
 
-    if suffix == ".pdf":
-        text = _parse_pdf(path)
-    elif suffix == ".docx":
-        text = _parse_docx(path)
-    elif suffix in (".md", ".txt"):
-        text = path.read_text(encoding="utf-8")
-    else:
-        text = path.read_text(encoding="utf-8")
-
+    Args:
+        text: Full text extracted from PDF/DOCX/MD by the caller (LLM).
+    """
     if not text.strip():
-        raise ValueError(f"文件 {path} 内容为空或无法读取。")
-
-    # PDF with very little text likely scanned
-    if suffix == ".pdf" and len(text.strip()) < 100:
-        raise ValueError(
-            "PDF 内容过少，可能是扫描件。请提供可选中文字的 PDF 版本，或改用 DOCX/Markdown。"
-        )
+        raise ValueError("文本内容为空，请确认文件已正确提取。")
 
     return _chunk_by_chapters(text)
-
-
-def _parse_pdf(path: Path) -> str:
-    """Extract text from PDF using pdfplumber."""
-    import pdfplumber
-
-    pages = []
-    with pdfplumber.open(str(path)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text() or ""
-            pages.append(text)
-    return "\n".join(pages)
-
-
-def _parse_docx(path: Path) -> str:
-    """Extract text from DOCX using python-docx."""
-    from docx import Document
-
-    doc = Document(str(path))
-    return "\n".join(p.text for p in doc.paragraphs)
 
 
 def _chunk_by_chapters(text: str) -> list[dict]:

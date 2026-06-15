@@ -2,7 +2,7 @@
 
 Tools:
   1. setup_review    — Initialize/reset state (exam date, hours, mode)
-  2. parse_material  — Extract text from PDF/DOCX/MD, chunk by chapters
+  2. parse_material  — Split text into chapter-based chunks (LLM extracts text first via pdf-mcp)
   3. sync_topics     — AI submits all knowledge points at once; tool scores + sorts
   4. record_answer   — Record diagnostic answer for a topic
   5. get_next_topic  — Get next untested A-level topic
@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 from datetime import date
 from typing import Literal
-from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -22,7 +21,7 @@ from .models import (
     Topic,
     ReviewState,
 )
-from .parser import parse_file
+from .parser import parse_text
 from .scorer import score_topics
 from .state import (
     get_or_create_state,
@@ -55,12 +54,13 @@ All scoring, sorting, and scheduling come exclusively from these tools. Do not o
 
 Workflow:
   0. setup_review(exam_date, daily_hours, chapter_weights?) → state
-  1. parse_material(file_path) → chapters (AI reads them, identifies knowledge points)
-  2. sync_topics(topics) → scored topics + learning order (AI does NOT recompute)
-  3. get_next_topic() → next A-level topic; AI asks question; record_answer(result)
+  1. Use pdf-mcp's pdf_read_all to extract text from PDF (or other tools for DOCX/MD)
+  2. parse_material(text) → chapters (AI reads them, identifies knowledge points)
+  3. sync_topics(topics) → scored topics + learning order (AI does NOT recompute)
+  4. get_next_topic() → next A-level topic; AI asks question; record_answer(result)
      Repeat until get_next_topic returns done:true
-  4. generate_plan() → priority list + daily schedule + weak summary
-  5. (Optional) get_next_topic(filter="all") → re-test weak topics; repeat from 3
+  5. generate_plan() → priority list + daily schedule + weak summary
+  6. (Optional) get_next_topic(filter="all") → re-test weak topics; repeat from 4
 
 AI responsibilities: identifying knowledge points from parsed text, generating questions, judging answers.
 Tool responsibilities: state, parsing, scoring math, topological sort, schedule generation, priority ranking.""",
@@ -110,18 +110,15 @@ def setup_review(
 
 
 @mcp.tool()
-def parse_material(file_path: str) -> str:
-    """Parse a PDF, DOCX, or Markdown file and return text chunked by chapters.
+def parse_material(text: str) -> str:
+    """Split plain text into chapter-based chunks. For PDF files, first use pdf-mcp's pdf_read_all to extract text, then pass the extracted text here.
 
     Args:
-        file_path: Absolute path to the file to parse.
+        text: Full text content extracted from PDF/DOCX/MD by the caller.
     """
-    path = Path(file_path)
-    if not path.exists():
-        return json.dumps({"error": f"文件不存在: {file_path}"})
 
     try:
-        chapters = parse_file(path)
+        chapters = parse_text(text)
     except Exception as e:
         return json.dumps({"error": f"解析失败: {e}"})
 

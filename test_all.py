@@ -201,7 +201,7 @@ assert plan_quick.daily_schedule == []
 print("  generate_plan (quick mode) OK")
 
 # ─── 7. Test parser ──────────────────────────────────────────────
-from exam_review.parser import parse_file, _chunk_by_chapters
+from exam_review.parser import parse_text, _chunk_by_chapters
 
 print("=== Test 7: Parser ===")
 # Test chapter chunking
@@ -217,15 +217,10 @@ chapters = _chunk_by_chapters(text)
 assert len(chapters) >= 2
 print(f"  _chunk_by_chapters OK: {len(chapters)} chapters")
 
-# Test text file parsing
-tmp_md = Path(tempfile.mktemp(suffix=".md"))
-tmp_md.write_text("第一章 测试\n\n测试内容在这里。", encoding="utf-8")
-parsed = parse_file(tmp_md)
+# Test parse_text with markdown content
+parsed = parse_text("第一章 测试\n\n测试内容在这里。")
 # Parser splits by chapter markers; single-chapter text becomes "全文"
-print(f"  parse_file (markdown) OK: {[c['name'] for c in parsed]}")
-
-# Clean up
-tmp_md.unlink()
+print(f"  parse_text OK: {[c['name'] for c in parsed]}")
 
 # ─── 8. Test server tools (direct function calls) ────────────────
 from exam_review.server import (
