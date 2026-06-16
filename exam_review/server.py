@@ -1,4 +1,4 @@
-"""MCP Server for exam review — 7 tools, minimal state, pure computation.
+"""MCP Server for exam review — 9 tools, minimal state, pure computation.
 
 Tools:
   1. setup_review    — Initialize/reset state (exam date, hours, mode)
@@ -8,6 +8,8 @@ Tools:
   5. get_next_topic  — Get next untested A-level topic
   5.5 patch_topic    — Incrementally update a single topic
   6. generate_plan   — Compute priority scores and daily schedule
+  7. generate_review_doc — Generate Markdown review document
+  8. get_question_bank — Return topics with examples or homework references
 """
 
 from __future__ import annotations
@@ -42,10 +44,11 @@ from .diagnostic import (
     get_next_for_retest,
 )
 from .planner import generate_plan as _generate_plan
+from .planner import render_review_doc as _render_review_doc
 
 mcp = FastMCP(
     "exam-review",
-    instructions="""Final Exam Review MCP Server — 7 tools for AI study coaching.
+    instructions="""Final Exam Review MCP Server — 9 tools for AI study coaching.
 
 ═══ AUTHORITY BOUNDARY ═══
 TOOL = single source of truth. AI = interface only.
@@ -70,7 +73,9 @@ Tool responsibilities: state, parsing, scoring math, topological sort, schedule 
 
 Additional tools:
   - patch_topic(topic_id, level?, attributes_merge?, source?) → incrementally update a single topic
-    Use when the user wants to add/correct a key point without re-syncing all topics.""",
+    Use when the user wants to add/correct a key point without re-syncing all topics.
+  - generate_review_doc(sort_by?) -> Markdown review document (chapter or learning_order)
+  - get_question_bank(topic_ids?) -> Topics with examples/homework_refs""",
 )
 
 
@@ -394,6 +399,31 @@ def generate_plan() -> str:
 
     save_state(state)
     return plan.model_dump_json(indent=2)
+
+
+# ─── Tool 7: generate_review_doc ─────────────────────────────────
+
+
+@mcp.tool()
+def generate_review_doc(
+    sort_by: Literal["chapter", "learning_order"] = "chapter",
+) -> str:
+    """Generate a Markdown review document organized by chapter or learning order. Returns Markdown text for AI to present or save.
+
+    Args:
+        sort_by: "chapter" groups topics by chapter, "learning_order" follows topological sort order.
+    """
+    state = load_state()
+    if state is None or not state.topics:
+        return json.dumps({"error": "没有知识点。请先完成 setup + sync_topics。"})
+
+    md = _render_review_doc(
+        topics=state.topics,
+        practice_history=state.practice_history,
+        learning_order=state.learning_order,
+        sort_by=sort_by,
+    )
+    return md
 
 
 # ─── Entry Point ───────────────────────────────────────────────

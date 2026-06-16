@@ -170,3 +170,88 @@ def _build_weak_summary(sorted_topics: list[Topic]) -> str:
     for t in weak[:5]:
         lines.append(f"  - {t.name} ({t.level}级, {t.importance:.2f})")
     return "\n".join(lines)
+
+
+def render_review_doc(
+    topics: list[Topic],
+    practice_history: list,
+    learning_order: list[str] | None = None,
+    sort_by: str = "chapter",
+) -> str:
+    """Render a Markdown review document from current state."""
+    status_emoji = {
+        "weak": "🔴",
+        "learning": "🟡",
+        "mastered": "🟢",
+        "unknown": "⚪",
+    }
+
+    # Build practice history index: topic_id -> list of (date, result)
+    history_by_topic: dict[str, list[tuple[str, str]]] = {}
+    for rec in practice_history:
+        history_by_topic.setdefault(rec.topic_id, []).append((rec.date, rec.result))
+
+    # Group topics
+    if sort_by == "chapter":
+        chapters: dict[str, list[Topic]] = {}
+        no_chapter: list[Topic] = []
+        for t in topics:
+            if t.chapter:
+                chapters.setdefault(t.chapter, []).append(t)
+            else:
+                no_chapter.append(t)
+        sorted_groups: list[tuple[str, list[Topic]]] = []
+        for ch_name in sorted(chapters.keys()):
+            sorted_groups.append((ch_name, sorted(chapters[ch_name], key=lambda t: t.importance, reverse=True)))
+        if no_chapter:
+            sorted_groups.append(("未分类", sorted(no_chapter, key=lambda t: t.importance, reverse=True)))
+    else:
+        order_map = {tid: i for i, tid in enumerate(learning_order or [])}
+        sorted_topics = sorted(topics, key=lambda t: order_map.get(t.id, 999))
+        sorted_groups = [("学习顺序", sorted_topics)]
+
+    today = date.today().isoformat()
+    lines = [f"# 复习手册 — {today}", ""]
+
+    for group_name, group_topics in sorted_groups:
+        for t in group_topics:
+            emoji = status_emoji.get(t.status, "⚪")
+            lines.append(f"## {group_name} {t.name} [{t.level}] {emoji} {t.status}")
+            lines.append("")
+
+            # Source
+            if t.source:
+                lines.append(f"> {t.source}")
+                lines.append("")
+            else:
+                lines.append("（无 source 原文）")
+                lines.append("")
+
+            # Attributes
+            if t.attributes:
+                key_labels = {
+                    "formulas": "公式",
+                    "definitions": "定义",
+                    "pitfalls": "易错",
+                    "examples": "例题",
+                    "homework_refs": "作业",
+                }
+                for key, vals in t.attributes.items():
+                    label = key_labels.get(key, key)
+                    lines.append(f"**{label}**: {', '.join(vals)}")
+            else:
+                lines.append("（无属性）")
+            lines.append("")
+
+            # Practice history
+            recs = history_by_topic.get(t.id, [])
+            if recs:
+                history_str = ", ".join(f"{d} {r}" for d, r in recs)
+                lines.append(f"**练习记录**: {history_str}")
+            else:
+                lines.append("**练习记录**: （未测试）")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+    return "\n".join(lines)

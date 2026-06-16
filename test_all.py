@@ -244,7 +244,7 @@ print(f"  parse_text OK: {[c['name'] for c in parsed]}")
 from exam_review.server import (
     setup_review, parse_material, sync_topics,
     record_answer, get_next_topic, generate_plan,
-    patch_topic,
+    patch_topic, generate_review_doc,
 )
 from exam_review.state import load_state
 
@@ -351,6 +351,17 @@ assert "priority_list" in plan_result
 assert len(plan_result["priority_list"]) == 4
 assert "daily_schedule" in plan_result
 print(f"  generate_plan OK: {len(plan_result['priority_list'])} topics")
+
+# Test generate_review_doc
+doc_result = generate_review_doc(sort_by="chapter")
+assert "复习手册" in doc_result
+assert "线性回归" in doc_result
+assert "🔴" in doc_result  # weak emoji
+print("  generate_review_doc (chapter) OK")
+
+doc_lo = generate_review_doc(sort_by="learning_order")
+assert "练习记录" in doc_lo
+print("  generate_review_doc (learning_order) OK")
 
 # Cleanup
 reset_state()
