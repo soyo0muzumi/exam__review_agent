@@ -1,6 +1,6 @@
 # Final Exam Review — MCP Server
 
-AI-powered exam review planner, delivered as an MCP Server with 7 tools.
+AI-powered exam review planner, delivered as an MCP Server with 9 tools.
 
 [English](#quick-start) | [中文](#快速开始)
 
@@ -31,7 +31,7 @@ Or use the CLI:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-Then restart Hermes Agent. The 7 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
+Then restart Hermes Agent. The 9 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
 
 ### Configure Claude Code
 
@@ -117,7 +117,7 @@ Persisted to `~/.exam-review/state.json`. Resumes automatically on next session.
 
 ## Modes
 
-- **normal**: Full 7-tool workflow
+- **normal**: Full 9-tool workflow
 - **cram**: ≤3 days to exam, tight packing, A-level only
 - **quick**: Priority list only, test first 3 A-level topics
 
@@ -155,7 +155,7 @@ mcp_servers:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-然后重启 Hermes Agent，7 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
+然后重启 Hermes Agent，9 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
 
 ### 配置 Claude Code
 
