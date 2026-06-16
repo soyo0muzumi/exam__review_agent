@@ -30,6 +30,12 @@ class Topic(BaseModel):
     source: str = ""
 
 
+class PracticeRecord(BaseModel):
+    topic_id: str
+    date: str       # ISO format: "2026-06-16"
+    result: Literal["mastered", "learning", "weak"]
+
+
 class ReviewState(BaseModel):
     version: int = 2
     topic_version: int = 0
@@ -41,6 +47,7 @@ class ReviewState(BaseModel):
     topics: list[Topic] = Field(default_factory=list)
     learning_order: list[str] = Field(default_factory=list)
     tested_topic_ids: list[str] = Field(default_factory=list)
+    practice_history: list[PracticeRecord] = Field(default_factory=list)
 
 
 class DailyPlanItem(BaseModel):

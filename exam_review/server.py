@@ -21,6 +21,7 @@ from mcp.server.fastmcp import FastMCP
 from .models import (
     Topic,
     ReviewState,
+    PracticeRecord,
 )
 from .parser import parse_text
 from .scorer import score_topics

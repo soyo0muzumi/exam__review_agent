@@ -20,6 +20,14 @@ topic_with_attrs = Topic(
 )
 assert topic_with_attrs.attributes["formulas"] == ["σ(wx+b)"]
 assert topic_with_attrs.source.startswith("神经网络")
+from exam_review.models import PracticeRecord
+pr = PracticeRecord(topic_id="lr", date="2026-06-16", result="weak")
+assert pr.topic_id == "lr"
+assert pr.date == "2026-06-16"
+assert pr.result == "weak"
+state_with_history = ReviewState(exam_date="2026-07-15", daily_hours=3, mode="normal")
+assert state_with_history.practice_history == []  # default empty
+print("  PracticeRecord OK")
 state = ReviewState(exam_date="2026-07-15", daily_hours=3, mode="normal")
 assert state.exam_date == "2026-07-15"
 assert state.topics == []
