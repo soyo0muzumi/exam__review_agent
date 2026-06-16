@@ -37,6 +37,7 @@ print("  Models OK")
 from exam_review.state import (
     set_state_path, save_state, load_state, reset_state,
     save_chapter_text, load_all_chapter_text, get_or_create_state,
+    switch_subject as _switch_subject, list_subjects as _list_subjects,
 )
 
 print("=== Test 2: State persistence ===")
@@ -245,6 +246,7 @@ from exam_review.server import (
     setup_review, parse_material, sync_topics,
     record_answer, get_next_topic, generate_plan,
     patch_topic, generate_review_doc, get_question_bank,
+    switch_subject, list_subjects,
 )
 from exam_review.state import load_state
 
@@ -388,6 +390,70 @@ doc_with_examples = generate_review_doc(sort_by="chapter")
 assert "例题" in doc_with_examples or "例3.1" in doc_with_examples
 assert "作业" in doc_with_examples or "习题3.2" in doc_with_examples
 print("  generate_review_doc (with examples/homework) OK")
+
+# ─── 9. Test multi-subject isolation ───────────────────────────
+
+print("=== Test 9: Multi-subject isolation ===")
+
+# Create isolated temp directories for subjects
+subj1_dir = Path(tempfile.mkdtemp()) / "高数"
+subj2_dir = Path(tempfile.mkdtemp()) / "线性代数"
+
+# Switch to 高数 (manually set path for test isolation)
+set_state_path(subj1_dir / "state.json")
+subj1_dir.mkdir(parents=True, exist_ok=True)
+(subj1_dir / "chapters").mkdir(parents=True, exist_ok=True)
+
+setup_review(exam_date="2026-07-15", daily_hours=3, mode="normal")
+sync_topics(topics=[
+    {"name": "微积分", "level": "A", "chapter": "第1章", "depends_on": []},
+])
+高数_next = json.loads(get_next_topic())
+assert 高数_next["name"] == "微积分"
+print("  高数 state OK")
+
+# Switch to 线性代数
+set_state_path(subj2_dir / "state.json")
+subj2_dir.mkdir(parents=True, exist_ok=True)
+(subj2_dir / "chapters").mkdir(parents=True, exist_ok=True)
+
+setup_review(exam_date="2026-07-20", daily_hours=2, mode="normal")
+sync_topics(topics=[
+    {"name": "矩阵", "level": "A", "chapter": "第1章", "depends_on": []},
+])
+代数_next = json.loads(get_next_topic())
+assert 代数_next["name"] == "矩阵"
+print("  线性代数 state OK")
+
+# Verify isolation: switching back to 高数 should still have 微积分
+set_state_path(subj1_dir / "state.json")
+高数_state = load_state()
+assert len(高数_state.topics) == 1
+assert 高数_state.topics[0].name == "微积分"
+assert 高数_state.exam_date == "2026-07-15"
+print("  高数 state preserved after switching subjects OK")
+
+# Test switch_subject function directly
+result = _switch_subject("测试科目")
+assert result["subject"] == "测试科目"
+assert result["state_exists"] == False
+print("  switch_subject new subject OK")
+
+# Test list_subjects
+subjects = _list_subjects()
+assert isinstance(subjects, dict)
+assert "subjects" in subjects
+print("  list_subjects OK")
+
+# Cleanup test subject dirs
+import shutil
+shutil.rmtree(subj1_dir.parent, ignore_errors=True)
+shutil.rmtree(subj2_dir.parent, ignore_errors=True)
+
+# Reset to default for remaining cleanup
+reset_state()
+set_state_path(tmp_dir / "state.json")
+print("  Multi-subject isolation OK")
 
 # Cleanup
 reset_state()
