@@ -244,7 +244,7 @@ print(f"  parse_text OK: {[c['name'] for c in parsed]}")
 from exam_review.server import (
     setup_review, parse_material, sync_topics,
     record_answer, get_next_topic, generate_plan,
-    patch_topic, generate_review_doc,
+    patch_topic, generate_review_doc, get_question_bank,
 )
 from exam_review.state import load_state
 
@@ -362,6 +362,26 @@ print("  generate_review_doc (chapter) OK")
 doc_lo = generate_review_doc(sort_by="learning_order")
 assert "练习记录" in doc_lo
 print("  generate_review_doc (learning_order) OK")
+
+# Test get_question_bank
+qb_empty = json.loads(get_question_bank())
+assert qb_empty["total_topics_with_examples"] == 0
+print("  get_question_bank (empty) OK")
+
+# Patch a topic to add examples
+patch_topic(topic_id=lr_id, attributes_merge={"examples": ["例3.1: 求回归方程"], "homework_refs": ["习题3.2"]})
+qb_result = json.loads(get_question_bank())
+assert qb_result["total_topics_with_examples"] == 1
+assert qb_result["topics_with_examples"][0]["topic_id"] == lr_id
+assert "习题3.2" in qb_result["topics_with_examples"][0]["homework_refs"]
+print("  get_question_bank (with data) OK")
+
+# Filter by topic_ids
+qb_filtered = json.loads(get_question_bank(topic_ids=[lr_id]))
+assert qb_filtered["total_topics_with_examples"] == 1
+qb_filtered_empty = json.loads(get_question_bank(topic_ids=["nonexistent_id"]))
+assert qb_filtered_empty["total_topics_with_examples"] == 0
+print("  get_question_bank (filter) OK")
 
 # Cleanup
 reset_state()

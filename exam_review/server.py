@@ -160,7 +160,18 @@ def sync_topics(topics: list[dict]) -> str:
     """Submit all knowledge points at once. This is the ONLY way to set topics. AI identifies topics from parsed text, assigns levels, and lists dependencies. The tool auto-calculates importance and learning order. Calling again ADDS new topics and UPDATES metadata of existing ones (name, level, chapter, depends_on, attributes, source), but does NOT recompute importance of already-scored topics. Note: attributes and source are REPLACED on update, not merged — use patch_topic for incremental changes.
 
     Args:
-        topics: List of topic dicts. Each must have "name" and "level" (A/B/C). Optional: "chapter", "depends_on" (list of other topic names), "attributes" (dict of semantic-type→list[str], e.g. {"formulas": ["y=wx+b"], "pitfalls": ["过拟合"]}), "source" (relevant textbook excerpt for this topic).
+        topics: List of topic dicts. Each must have "name" and "level" (A/B/C). Optional: "chapter", "depends_on" (list of other topic names), "attributes" (dict of semantic-type→list[str]), "source" (relevant textbook excerpt for this topic).
+            Recommended attributes keys:
+              "formulas"      — core formulas
+              "definitions"   — key definitions
+              "pitfalls"      — common misconceptions
+              "examples"      — example problems. Prioritize textbook "例"/"例题" markers.
+                                If textbook lacks examples, AI may call web_search for supplementary
+                                problems, but MUST confirm with the user and mark each item with
+                                "(来源: 网络搜索)". NEVER fabricate from model knowledge.
+              "homework_refs" — homework/exercise references. Same sourcing rules as examples:
+                                textbook first, web_search with confirmation + attribution second,
+                                never fabricated.
     """
     state = load_state()
     if state is None:
@@ -424,6 +435,50 @@ def generate_review_doc(
         sort_by=sort_by,
     )
     return md
+
+
+# ─── Tool 8: get_question_bank ────────────────────────────────────
+
+
+@mcp.tool()
+def get_question_bank(
+    topic_ids: list[str] | None = None,
+) -> str:
+    """Return topics that have examples or homework references in their attributes. Structured JSON for AI to reference when generating questions.
+
+    Args:
+        topic_ids: Optional list of topic IDs to filter. If None, returns all topics with examples/homework_refs.
+    """
+    state = load_state()
+    if state is None or not state.topics:
+        return json.dumps({"error": "没有知识点。请先完成 setup + sync_topics。"})
+
+    topics = state.topics
+    if topic_ids is not None:
+        id_set = set(topic_ids)
+        topics = [t for t in topics if t.id in id_set]
+
+    result_topics = []
+    for t in topics:
+        examples = t.attributes.get("examples", [])
+        homework = t.attributes.get("homework_refs", [])
+        if examples or homework:
+            result_topics.append({
+                "topic_id": t.id,
+                "name": t.name,
+                "chapter": t.chapter,
+                "examples": examples,
+                "homework_refs": homework,
+            })
+
+    return json.dumps(
+        {
+            "topics_with_examples": result_topics,
+            "total_topics_with_examples": len(result_topics),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 # ─── Entry Point ───────────────────────────────────────────────

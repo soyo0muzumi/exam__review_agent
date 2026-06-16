@@ -68,7 +68,7 @@ python -m exam_review.server
 
 This starts the MCP server on stdio. Claude Code will connect automatically when configured.
 
-## Tools (7)
+## Tools (9)
 
 | Tool | Input | Output | Purpose |
 |------|-------|--------|---------|
@@ -79,6 +79,8 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 | `get_next_topic` | filter? (untested/all) | Next A-level topic with attributes & source | Get next question target |
 | `patch_topic` | topic_id, level?, attributes_merge?, source? | Updated topic | Incrementally update a single topic (merge semantics) |
 | `generate_plan` | (uses current state) | Priority list + daily schedule + weak summary | Generate final review plan |
+| `generate_review_doc` | sort_by? (chapter/learning_order) | Markdown review document | Generate review document organized by chapter or learning order |
+| `get_question_bank` | topic_ids? | JSON with topics that have examples/homework_refs | Show available examples and homework references |
 
 ## Workflow
 
@@ -94,6 +96,8 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
    → Repeat until done
    (Optional: patch_topic → Incrementally update a topic's attributes/source)
 5. generate_plan        → Get priority list + schedule
+   (Optional: generate_review_doc → Markdown review document for human review)
+   (Optional: get_question_bank → List topics with example problems for study)
 ```
 
 ## Priority Function
@@ -188,7 +192,7 @@ python -m exam_review.server
 
 服务通过 stdio 启动 MCP 协议，配置后 Claude Code 会自动连接。
 
-## 工具 (7)
+## 工具 (9)
 
 | 工具 | 输入 | 输出 | 用途 |
 |------|------|------|------|
@@ -199,6 +203,8 @@ python -m exam_review.server
 | `get_next_topic` | filter? (untested/all) | 下一个 A 级知识点（含 attributes & source） | 获取下一个测试目标 |
 | `patch_topic` | topic_id, level?, attributes_merge?, source? | 更新后的知识点 | 增量更新单个知识点（合并语义） |
 | `generate_plan` | （使用当前状态） | 优先级列表 + 每日计划 + 薄弱总结 | 生成最终复习计划 |
+| `generate_review_doc` | sort_by? (chapter/learning_order) | Markdown 复习文档 | 按章节或学习顺序生成复习手册 |
+| `get_question_bank` | topic_ids? | 包含例题/作业的知识点 JSON | 展示可用的例题和作业题目 |
 
 ## 工作流
 
@@ -214,6 +220,8 @@ python -m exam_review.server
    → 重复直到完成
    （可选：patch_topic → 增量更新知识点的 attributes/source）
 5. generate_plan        → 获取优先级列表 + 学习计划
+   （可选：generate_review_doc → 生成 Markdown 复习文档供人阅读）
+   （可选：get_question_bank → 列出有例题的知识点）
 ```
 
 ## 优先级公式
@@ -233,7 +241,7 @@ python -m exam_review.server
 
 ## 模式
 
-- **normal**：完整 7 工具工作流
+- **normal**：完整 9 工具工作流
 - **cram**：距离考试 ≤3 天，紧凑安排，仅 A 级知识点
 - **quick**：仅生成优先级列表，测试前 3 个 A 级知识点
 
