@@ -246,6 +246,7 @@ from exam_review.server import (
     record_answer, get_next_topic, generate_plan,
     patch_topic,
 )
+from exam_review.state import load_state
 
 print("=== Test 8: Server tool functions ===")
 
@@ -324,6 +325,13 @@ record_result = json.loads(record_answer(
 assert record_result["result"] == "weak"
 assert record_result["progress"]["weak"] == 1
 print(f"  record_answer OK: {record_result['topic_id']} → weak")
+
+# Verify practice_history was appended
+state_check = load_state()
+assert len(state_check.practice_history) >= 1
+assert state_check.practice_history[0].topic_id == next_topic["topic_id"]
+assert state_check.practice_history[0].result == "weak"
+print("  practice_history append OK")
 
 # Get next again
 next2 = json.loads(get_next_topic())

@@ -262,6 +262,9 @@ def record_answer(
     topic.status = result
     if topic_id not in state.tested_topic_ids:
         state.tested_topic_ids.append(topic_id)
+    state.practice_history.append(
+        PracticeRecord(topic_id=topic_id, date=date.today().isoformat(), result=result)
+    )
     save_state(state)
 
     progress = calculate_progress(state.topics)
