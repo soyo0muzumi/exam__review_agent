@@ -26,6 +26,8 @@ class Topic(BaseModel):
     chapter: str = ""
     status: Literal["unknown", "mastered", "learning", "weak"] = "unknown"
     depends_on: list[str] = Field(default_factory=list)
+    attributes: dict[str, list[str]] = Field(default_factory=dict)
+    source: str = ""
 
 
 class ReviewState(BaseModel):

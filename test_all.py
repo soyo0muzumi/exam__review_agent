@@ -11,6 +11,15 @@ print("=== Test 1: Models ===")
 topic = Topic(id="lr", name="线性回归", level="A", importance=0.85, chapter="第3章")
 assert topic.id == "lr"
 assert topic.importance == 0.85
+assert topic.attributes == {}  # default
+assert topic.source == ""  # default
+topic_with_attrs = Topic(
+    id="nn", name="神经网络", level="A", importance=0.85,
+    attributes={"formulas": ["σ(wx+b)"], "pitfalls": ["过拟合"]},
+    source="神经网络是一种模拟生物神经系统的计算模型...",
+)
+assert topic_with_attrs.attributes["formulas"] == ["σ(wx+b)"]
+assert topic_with_attrs.source.startswith("神经网络")
 state = ReviewState(exam_date="2026-07-15", daily_hours=3, mode="normal")
 assert state.exam_date == "2026-07-15"
 assert state.topics == []
@@ -188,7 +197,8 @@ assert len(plan.priority_list) == 3
 assert plan.priority_list[0]["name"] == "线性回归"  # highest priority
 assert len(plan.daily_schedule) > 0
 print(f"  generate_plan OK: {len(plan.daily_schedule)} days scheduled")
-print(f"  Weak summary: {plan.weak_summary[:40]}...")
+weak_summary_ascii = plan.weak_summary.encode("ascii", errors="replace").decode()
+print(f"  Weak summary: {weak_summary_ascii[:40]}...")
 
 # Quick mode — no daily schedule
 plan_quick = generate_plan(
@@ -226,6 +236,7 @@ print(f"  parse_text OK: {[c['name'] for c in parsed]}")
 from exam_review.server import (
     setup_review, parse_material, sync_topics,
     record_answer, get_next_topic, generate_plan,
+    patch_topic,
 )
 
 print("=== Test 8: Server tool functions ===")
@@ -247,7 +258,9 @@ print("  setup_review OK")
 # Sync topics
 topics_input = [
     {"name": "统计基础", "level": "B", "chapter": "第1章", "depends_on": []},
-    {"name": "线性回归", "level": "A", "chapter": "第3章", "depends_on": ["统计基础"]},
+    {"name": "线性回归", "level": "A", "chapter": "第3章", "depends_on": ["统计基础"],
+     "attributes": {"formulas": ["β̂ = (X'X)⁻¹X'y"], "pitfalls": ["R²高≠模型好"]},
+     "source": "线性回归是研究变量间线性关系的统计方法..."},
     {"name": "梯度下降", "level": "A", "chapter": "第4章", "depends_on": ["线性回归"]},
     {"name": "正则化", "level": "B", "chapter": "第5章", "depends_on": ["线性回归"]},
 ]
@@ -255,12 +268,45 @@ sync_result = json.loads(sync_topics(topics=topics_input))
 assert sync_result["added"] == 4
 assert sync_result["updated"] == 0
 assert len(sync_result["learning_order"]) == 4
+# Verify attributes and source are stored
+topics_by_name = {t["name"]: t for t in sync_result["topics"]}
+assert topics_by_name["线性回归"]["attributes"]["formulas"] == ["β̂ = (X'X)⁻¹X'y"]
+assert topics_by_name["线性回归"]["source"].startswith("线性回归")
+assert topics_by_name["统计基础"]["attributes"] == {}
 print(f"  sync_topics OK: added={sync_result['added']}, order={sync_result['learning_order']}")
+
+# Test sync_topics REPLACE semantics: re-submitting same topic with new attributes replaces them
+sync_result2 = json.loads(sync_topics(topics=[
+    {"name": "线性回归", "level": "A", "chapter": "第3章", "depends_on": ["统计基础"],
+     "attributes": {"formulas": ["新公式"], "definitions": ["线性模型"]}, "source": "新的原文"},
+]))
+assert sync_result2["updated"] == 1
+updated_lr = next(t for t in sync_result2["topics"] if t["name"] == "线性回归")
+assert updated_lr["attributes"] == {"formulas": ["新公式"], "definitions": ["线性模型"]}  # replaced, not merged
+assert updated_lr["source"] == "新的原文"
+print("  sync_topics REPLACE semantics OK")
 
 # Get next topic
 next_topic = json.loads(get_next_topic())
 assert next_topic["level"] == "A"
+assert "attributes" in next_topic
+assert "source" in next_topic
 print(f"  get_next_topic OK: {next_topic['name']}")
+
+# Incremental update via patch_topic (merge semantics)
+lr_id = "线性回归".replace(" ", "_").lower()  # "线性回归"
+patch_result = json.loads(patch_topic(
+    topic_id=lr_id,
+    attributes_merge={"pitfalls": ["R²高≠模型好"]},
+    source="线性回归是研究变量间线性关系的统计方法，通过最小二乘法拟合...",
+))
+# patch_topic MERGES: new key "pitfalls" added, existing key "formulas" preserved
+assert "pitfalls" in patch_result["attributes"]
+assert "R²高≠模型好" in patch_result["attributes"]["pitfalls"]
+assert "formulas" in patch_result["attributes"]  # still there from sync_topics replace
+assert patch_result["source"].startswith("线性回归")
+attrs_safe = json.dumps(patch_result["attributes"], ensure_ascii=True)
+print(f"  patch_topic OK: {patch_result['name']} attrs={attrs_safe}")
 
 # Record answer
 record_result = json.loads(record_answer(

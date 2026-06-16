@@ -1,4 +1,4 @@
-"""MCP Server for exam review — 6 tools, minimal state, pure computation.
+"""MCP Server for exam review — 7 tools, minimal state, pure computation.
 
 Tools:
   1. setup_review    — Initialize/reset state (exam date, hours, mode)
@@ -6,6 +6,7 @@ Tools:
   3. sync_topics     — AI submits all knowledge points at once; tool scores + sorts
   4. record_answer   — Record diagnostic answer for a topic
   5. get_next_topic  — Get next untested A-level topic
+  5.5 patch_topic    — Incrementally update a single topic
   6. generate_plan   — Compute priority scores and daily schedule
 """
 
@@ -43,27 +44,32 @@ from .planner import generate_plan as _generate_plan
 
 mcp = FastMCP(
     "exam-review",
-    instructions="""Final Exam Review MCP Server — 6 tools for AI study coaching.
+    instructions="""Final Exam Review MCP Server — 7 tools for AI study coaching.
 
 ═══ AUTHORITY BOUNDARY ═══
 TOOL = single source of truth. AI = interface only.
 AI MUST NOT: compute priority, modify scores, reorder topics, skip steps.
 AI CAN ONLY: extract knowledge points from text, ask questions, judge answers, present results.
 All scoring, sorting, and scheduling come exclusively from these tools. Do not override or second-guess tool output.
-════════════════════════
+════════════════
 
 Workflow:
   0. setup_review(exam_date, daily_hours, chapter_weights?) → state
   1. Use pdf-mcp's pdf_read_all to extract text from PDF (or other tools for DOCX/MD)
   2. parse_material(text) → chapters (AI reads them, identifies knowledge points)
   3. sync_topics(topics) → scored topics + learning order (AI does NOT recompute)
-  4. get_next_topic() → next A-level topic; AI asks question; record_answer(result)
+     Each topic can include "attributes" (dict: type→list[str]) and "source" (textbook excerpt)
+  4. get_next_topic() → next A-level topic with attributes & source; AI asks question; record_answer(result)
      Repeat until get_next_topic returns done:true
   5. generate_plan() → priority list + daily schedule + weak summary
   6. (Optional) get_next_topic(filter="all") → re-test weak topics; repeat from 4
 
 AI responsibilities: identifying knowledge points from parsed text, generating questions, judging answers.
-Tool responsibilities: state, parsing, scoring math, topological sort, schedule generation, priority ranking.""",
+Tool responsibilities: state, parsing, scoring math, topological sort, schedule generation, priority ranking.
+
+Additional tools:
+  - patch_topic(topic_id, level?, attributes_merge?, source?) → incrementally update a single topic
+    Use when the user wants to add/correct a key point without re-syncing all topics.""",
 )
 
 
@@ -145,10 +151,10 @@ def parse_material(text: str) -> str:
 
 @mcp.tool()
 def sync_topics(topics: list[dict]) -> str:
-    """Submit all knowledge points at once. This is the ONLY way to set topics. AI identifies topics from parsed text, assigns levels, and lists dependencies. The tool auto-calculates importance and learning order. Calling again ADDS new topics and UPDATES metadata of existing ones (name, level, chapter, depends_on), but does NOT recompute importance of already-scored topics.
+    """Submit all knowledge points at once. This is the ONLY way to set topics. AI identifies topics from parsed text, assigns levels, and lists dependencies. The tool auto-calculates importance and learning order. Calling again ADDS new topics and UPDATES metadata of existing ones (name, level, chapter, depends_on, attributes, source), but does NOT recompute importance of already-scored topics. Note: attributes and source are REPLACED on update, not merged — use patch_topic for incremental changes.
 
     Args:
-        topics: List of topic dicts. Each must have "name" and "level" (A/B/C). Optional: "chapter", "depends_on" (list of other topic names that are prerequisites).
+        topics: List of topic dicts. Each must have "name" and "level" (A/B/C). Optional: "chapter", "depends_on" (list of other topic names), "attributes" (dict of semantic-type→list[str], e.g. {"formulas": ["y=wx+b"], "pitfalls": ["过拟合"]}), "source" (relevant textbook excerpt for this topic).
     """
     state = load_state()
     if state is None:
@@ -179,6 +185,12 @@ def sync_topics(topics: list[dict]) -> str:
             existing.level = t.get("level", existing.level)
             existing.chapter = t.get("chapter", existing.chapter)
             existing.depends_on = depends_on or existing.depends_on
+            # Replace attributes and source — sync_topics provides a full snapshot
+            if "attributes" in t:
+                existing.attributes = t["attributes"]
+            # Update source only if provided and non-empty
+            if t.get("source"):
+                existing.source = t["source"]
             updated += 1
         else:
             new_topics.append(
@@ -190,6 +202,8 @@ def sync_topics(topics: list[dict]) -> str:
                     chapter=t.get("chapter", ""),
                     status="unknown",
                     depends_on=depends_on,
+                    attributes=t.get("attributes", {}),
+                    source=t.get("source", ""),
                 )
             )
             added += 1
@@ -257,6 +271,8 @@ def record_answer(
             "topic_id": topic_id,
             "name": topic.name,
             "result": result,
+            "attributes": topic.attributes,
+            "source": topic.source,
             "progress": progress,
             "fatigue": fatigue,
         },
@@ -294,7 +310,58 @@ def get_next_topic(
         return json.dumps({"done": True, "message": "所有 A 级知识点已测试完毕。"})
 
     return json.dumps(
-        {"topic_id": next_topic.id, "name": next_topic.name, "level": next_topic.level},
+        {"topic_id": next_topic.id, "name": next_topic.name, "level": next_topic.level, "attributes": next_topic.attributes, "source": next_topic.source},
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+# ─── Tool 5.5: patch_topic ────────────────────────────────────
+
+
+@mcp.tool()
+def patch_topic(
+    topic_id: str,
+    level: str | None = None,
+    attributes_merge: dict[str, list[str]] | None = None,
+    source: str | None = None,
+) -> str:
+    """Incrementally update a single topic. Use this to add key points, fix attributes, or update source text without re-syncing all topics.
+
+    Args:
+        topic_id: The topic ID to update.
+        level: Optional new level (A/B/C).
+        attributes_merge: Optional dict to merge into existing attributes. Lists are extended, not replaced. E.g. {"pitfalls": ["R²高≠模型好"]} adds to existing pitfalls without removing others.
+        source: Optional new source text. Only updates if non-empty.
+    """
+    state = load_state()
+    if state is None:
+        return json.dumps({"error": "请先调用 setup_review 初始化。"})
+
+    topic = next((t for t in state.topics if t.id == topic_id), None)
+    if topic is None:
+        return json.dumps({"error": f"知识点 '{topic_id}' 不存在。"})
+
+    if level is not None:
+        topic.level = level
+
+    if attributes_merge:
+        for k, v in attributes_merge.items():
+            topic.attributes.setdefault(k, []).extend(v)
+
+    if source:
+        topic.source = source
+
+    save_state(state)
+
+    return json.dumps(
+        {
+            "topic_id": topic.id,
+            "name": topic.name,
+            "level": topic.level,
+            "attributes": topic.attributes,
+            "source": topic.source,
+        },
         ensure_ascii=False,
         indent=2,
     )

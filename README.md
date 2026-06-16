@@ -1,6 +1,6 @@
 # Final Exam Review — MCP Server
 
-AI-powered exam review planner, delivered as an MCP Server with 6 tools.
+AI-powered exam review planner, delivered as an MCP Server with 7 tools.
 
 [English](#quick-start) | [中文](#快速开始)
 
@@ -31,7 +31,7 @@ Or use the CLI:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-Then restart Hermes Agent. The 6 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
+Then restart Hermes Agent. The 7 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
 
 ### Configure Claude Code
 
@@ -68,15 +68,16 @@ python -m exam_review.server
 
 This starts the MCP server on stdio. Claude Code will connect automatically when configured.
 
-## Tools (6)
+## Tools (7)
 
 | Tool | Input | Output | Purpose |
 |------|-------|--------|---------|
 | `setup_review` | exam_date, daily_hours, chapter_weights?, mode? | State summary | Initialize/reset review state |
 | `parse_material` | text | chapters: [{name, text}] | Split text into chapter chunks (use pdf-mcp to extract PDF text first) |
-| `sync_topics` | topics: [{name, level, chapter, depends_on?}] | Scored topics + learning order | Submit all knowledge points, get scored list |
+| `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}] | Scored topics + learning order | Submit all knowledge points, get scored list |
 | `record_answer` | topic_id, result (mastered/learning/weak) | Progress + fatigue flag | Record diagnostic result |
-| `get_next_topic` | filter? (untested/all) | Next A-level topic to test | Get next question target |
+| `get_next_topic` | filter? (untested/all) | Next A-level topic with attributes & source | Get next question target |
+| `patch_topic` | topic_id, level?, attributes_merge?, source? | Updated topic | Incrementally update a single topic (merge semantics) |
 | `generate_plan` | (uses current state) | Priority list + daily schedule + weak summary | Generate final review plan |
 
 ## Workflow
@@ -86,10 +87,12 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 1. pdf-mcp pdf_read_all → Extract PDF text (or other tools for DOCX/MD)
 2. parse_material       → Split text into chapters
 3. sync_topics          → AI submits knowledge points → tool scores & sorts
-4. get_next_topic       → Get next topic to test
+   (Each topic can include attributes and source)
+4. get_next_topic       → Get next topic with attributes & source
    → AI asks question
    → record_answer      → Record result
    → Repeat until done
+   (Optional: patch_topic → Incrementally update a topic's attributes/source)
 5. generate_plan        → Get priority list + schedule
 ```
 
@@ -110,7 +113,7 @@ Persisted to `~/.exam-review/state.json`. Resumes automatically on next session.
 
 ## Modes
 
-- **normal**: Full 6-step workflow
+- **normal**: Full 7-tool workflow
 - **cram**: ≤3 days to exam, tight packing, A-level only
 - **quick**: Priority list only, test first 3 A-level topics
 
@@ -148,7 +151,7 @@ mcp_servers:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-然后重启 Hermes Agent，6 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
+然后重启 Hermes Agent，7 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
 
 ### 配置 Claude Code
 
@@ -185,15 +188,16 @@ python -m exam_review.server
 
 服务通过 stdio 启动 MCP 协议，配置后 Claude Code 会自动连接。
 
-## 工具 (6)
+## 工具 (7)
 
 | 工具 | 输入 | 输出 | 用途 |
 |------|------|------|------|
 | `setup_review` | exam_date, daily_hours, chapter_weights?, mode? | 状态摘要 | 初始化/重置复习状态 |
 | `parse_material` | text（纯文本） | chapters: [{name, text}] | 将文本按章节切分（PDF 需先通过 pdf-mcp 提取文本） |
-| `sync_topics` | topics: [{name, level, chapter, depends_on?}] | 评分后知识点 + 学习顺序 | 提交所有知识点，获取评分排序 |
+| `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}] | 评分后知识点 + 学习顺序 | 提交所有知识点，获取评分排序 |
 | `record_answer` | topic_id, result (mastered/learning/weak) | 进度 + 疲劳标记 | 记录诊断结果 |
-| `get_next_topic` | filter? (untested/all) | 下一个 A 级知识点 | 获取下一个测试目标 |
+| `get_next_topic` | filter? (untested/all) | 下一个 A 级知识点（含 attributes & source） | 获取下一个测试目标 |
+| `patch_topic` | topic_id, level?, attributes_merge?, source? | 更新后的知识点 | 增量更新单个知识点（合并语义） |
 | `generate_plan` | （使用当前状态） | 优先级列表 + 每日计划 + 薄弱总结 | 生成最终复习计划 |
 
 ## 工作流
@@ -203,10 +207,12 @@ python -m exam_review.server
 1. pdf-mcp pdf_read_all → 提取 PDF 文本（DOCX/MD 用其他工具）
 2. parse_material       → 按章节切分文本
 3. sync_topics          → AI 提交知识点 → 工具评分排序
-4. get_next_topic       → 获取下一个待测知识点
+   （每个知识点可包含 attributes 和 source）
+4. get_next_topic       → 获取下一个待测知识点（含 attributes & source）
    → AI 出题
    → record_answer      → 记录结果
    → 重复直到完成
+   （可选：patch_topic → 增量更新知识点的 attributes/source）
 5. generate_plan        → 获取优先级列表 + 学习计划
 ```
 
@@ -227,7 +233,7 @@ python -m exam_review.server
 
 ## 模式
 
-- **normal**：完整 6 步工作流
+- **normal**：完整 7 工具工作流
 - **cram**：距离考试 ≤3 天，紧凑安排，仅 A 级知识点
 - **quick**：仅生成优先级列表，测试前 3 个 A 级知识点
 
