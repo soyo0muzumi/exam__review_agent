@@ -8,7 +8,7 @@ Exam-AI MCP Server currently has 7 tools for exam review planning. Topics carry 
 
 - **generate_review_doc output**: Returns Markdown text; AI (Hermes) writes the file. Tool does not accept file paths.
 - **practice_history granularity**: Minimal — `{topic_id, date, result}` only. No `question` field.
-- **Question bank extraction**: AI extracts during `sync_topics` into `attributes.examples` / `attributes.homework_refs`. No regex extraction in tools.
+- **Question bank extraction**: AI extracts during `sync_topics` into `attributes.examples` / `attributes.homework_refs`. No regex extraction in tools. Sourcing rules: prioritize textbook; web search allowed but must confirm with user and mark "(来源: 网络搜索)"; never fabricate from model knowledge.
 - **Implementation order**: Two commits — Commit 1 covers items 1+2+3; Commit 2 covers item 4 (review_doc enhancement).
 
 ---
@@ -100,8 +100,13 @@ Recommended attributes keys:
   "formulas"      — core formulas
   "definitions"  — key definitions
   "pitfalls"      — common misconceptions
-  "examples"      — example problems (extract from textbook "例"/"例题" markers)
-  "homework_refs" — homework/exercise references (extract from "习题"/"练习题" markers)
+  "examples"      — example problems. Prioritize textbook "例"/"例题" markers.
+                    If textbook lacks examples, AI may call web_search for supplementary
+                    problems, but MUST confirm with the user and mark each item with
+                    "(来源: 网络搜索)". NEVER fabricate from model knowledge.
+  "homework_refs" — homework/exercise references. Same sourcing rules as examples:
+                    textbook first, web_search with confirmation + attribution second,
+                    never fabricated.
 ```
 
 This is advisory only — no hard constraint on key names.
