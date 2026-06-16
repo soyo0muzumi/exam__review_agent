@@ -1,6 +1,6 @@
 # Final Exam Review — MCP Server
 
-AI-powered exam review planner, delivered as an MCP Server with 9 tools.
+AI-powered exam review planner, delivered as an MCP Server with 11 tools.
 
 [English](#quick-start) | [中文](#快速开始)
 
@@ -31,7 +31,7 @@ Or use the CLI:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-Then restart Hermes Agent. The 9 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
+Then restart Hermes Agent. The 11 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
 
 ### Configure Claude Code
 
@@ -68,10 +68,12 @@ python -m exam_review.server
 
 This starts the MCP server on stdio. Claude Code will connect automatically when configured.
 
-## Tools (9)
+## Tools (11)
 
 | Tool | Input | Output | Purpose |
 |------|-------|--------|---------|
+| `switch_subject` | subject (name string) | Subject info (name, state_exists, topics_count) | Switch to a subject-specific state directory |
+| `list_subjects` | (none) | List of subjects with exam_date and progress | List all subjects that have been set up |
 | `setup_review` | exam_date, daily_hours, chapter_weights?, mode? | State summary | Initialize/reset review state |
 | `parse_material` | text | chapters: [{name, text}] | Split text into chapter chunks (use pdf-mcp to extract PDF text first) |
 | `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}] | Scored topics + learning order | Submit all knowledge points, get scored list |
@@ -85,6 +87,8 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 ## Workflow
 
 ```
+-1. switch_subject("高数") → Switch to a subject (call before setup_review for new subjects)
+-0.5. list_subjects() → List all existing subjects with progress info
 0. setup_review        → Set exam date & hours
 1. pdf-mcp pdf_read_all → Extract PDF text (or other tools for DOCX/MD)
 2. parse_material       → Split text into chapters
@@ -117,7 +121,7 @@ Persisted to `~/.exam-review/state.json`. Resumes automatically on next session.
 
 ## Modes
 
-- **normal**: Full 9-tool workflow
+- **normal**: Full 11-tool workflow
 - **cram**: ≤3 days to exam, tight packing, A-level only
 - **quick**: Priority list only, test first 3 A-level topics
 
@@ -155,7 +159,7 @@ mcp_servers:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-然后重启 Hermes Agent，9 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
+然后重启 Hermes Agent，11 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
 
 ### 配置 Claude Code
 
@@ -192,10 +196,12 @@ python -m exam_review.server
 
 服务通过 stdio 启动 MCP 协议，配置后 Claude Code 会自动连接。
 
-## 工具 (9)
+## 工具 (11)
 
 | 工具 | 输入 | 输出 | 用途 |
 |------|------|------|------|
+| `switch_subject` | subject（科目名） | 科目信息（名称、状态、知识点数） | 切换到科目专属状态目录 |
+| `list_subjects` | （无） | 所有科目的列表及进度 | 列出所有已设置的科目 |
 | `setup_review` | exam_date, daily_hours, chapter_weights?, mode? | 状态摘要 | 初始化/重置复习状态 |
 | `parse_material` | text（纯文本） | chapters: [{name, text}] | 将文本按章节切分（PDF 需先通过 pdf-mcp 提取文本） |
 | `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}] | 评分后知识点 + 学习顺序 | 提交所有知识点，获取评分排序 |
@@ -209,6 +215,8 @@ python -m exam_review.server
 ## 工作流
 
 ```
+-1. switch_subject("高数") → 切换到科目（新科目需先切换再 setup_review）
+-0.5. list_subjects() → 列出所有科目及进度
 0. setup_review        → 设置考试日期与每日学习时长
 1. pdf-mcp pdf_read_all → 提取 PDF 文本（DOCX/MD 用其他工具）
 2. parse_material       → 按章节切分文本
@@ -241,7 +249,7 @@ python -m exam_review.server
 
 ## 模式
 
-- **normal**：完整 9 工具工作流
+- **normal**：完整 11 工具工作流
 - **cram**：距离考试 ≤3 天，紧凑安排，仅 A 级知识点
 - **quick**：仅生成优先级列表，测试前 3 个 A 级知识点
 
