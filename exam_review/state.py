@@ -19,6 +19,7 @@ DEFAULT_STATE_PATH = DEFAULT_STATE_DIR / "state.json"
 CHAPTERS_DIR = DEFAULT_STATE_DIR / "chapters"
 
 _state_path = DEFAULT_STATE_PATH
+_current_subject: str | None = None
 
 
 def set_state_path(path: Path) -> None:
@@ -114,3 +115,48 @@ def get_or_create_state() -> ReviewState:
         state = ReviewState()
         save_state(state)
     return state
+
+
+def switch_subject(subject: str) -> dict:
+    """Switch to a subject-specific state directory. Creates the directory if needed.
+    Does NOT create state — call setup_review after switching to a new subject."""
+    global _state_path, CHAPTERS_DIR, _current_subject
+
+    subject_dir = DEFAULT_STATE_DIR / subject
+    subject_dir.mkdir(parents=True, exist_ok=True)
+    chapters_dir = subject_dir / "chapters"
+    chapters_dir.mkdir(parents=True, exist_ok=True)
+
+    _state_path = subject_dir / "state.json"
+    CHAPTERS_DIR = chapters_dir
+    _current_subject = subject
+
+    state = load_state()
+    if state is not None:
+        return {
+            "subject": subject,
+            "state_exists": True,
+            "topics_count": len(state.topics),
+            "exam_date": state.exam_date,
+        }
+    return {"subject": subject, "state_exists": False, "topics_count": 0, "exam_date": ""}
+
+
+def list_subjects() -> dict:
+    """List all subjects that have a state.json, with summary info."""
+    subject_dirs = []
+    if DEFAULT_STATE_DIR.exists():
+        for d in sorted(DEFAULT_STATE_DIR.iterdir()):
+            if d.is_dir() and (d / "state.json").exists():
+                try:
+                    data = json.loads((d / "state.json").read_text(encoding="utf-8"))
+                    state = ReviewState.model_validate(data)
+                    subject_dirs.append({
+                        "name": d.name,
+                        "exam_date": state.exam_date,
+                        "topics_count": len(state.topics),
+                        "tested_count": len(state.tested_topic_ids),
+                    })
+                except (json.JSONDecodeError, ValueError):
+                    subject_dirs.append({"name": d.name, "exam_date": "", "topics_count": 0, "tested_count": 0})
+    return {"current_subject": _current_subject, "subjects": subject_dirs}
