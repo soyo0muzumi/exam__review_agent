@@ -1,6 +1,8 @@
-"""MCP Server for exam review — 9 tools, minimal state, pure computation.
+"""MCP Server for exam review — 11 tools, minimal state, pure computation.
 
 Tools:
+  0. switch_subject  — Switch to a subject-specific state directory
+  0.5 list_subjects  — List all subjects with state
   1. setup_review    — Initialize/reset state (exam date, hours, mode)
   2. parse_material  — Split text into chapter-based chunks (LLM extracts text first via pdf-mcp)
   3. sync_topics     — AI submits all knowledge points at once; tool scores + sorts
@@ -34,6 +36,8 @@ from .state import (
     reset_state,
     save_chapter_text,
     save_state,
+    switch_subject as _switch_subject,
+    list_subjects as _list_subjects,
 )
 from .structure import topological_sort
 from .diagnostic import (
@@ -48,7 +52,7 @@ from .planner import render_review_doc as _render_review_doc
 
 mcp = FastMCP(
     "exam-review",
-    instructions="""Final Exam Review MCP Server — 9 tools for AI study coaching.
+    instructions="""Final Exam Review MCP Server — 11 tools for AI study coaching.
 
 ═══ AUTHORITY BOUNDARY ═══
 TOOL = single source of truth. AI = interface only.
@@ -58,6 +62,8 @@ All scoring, sorting, and scheduling come exclusively from these tools. Do not o
 ════════════════
 
 Workflow:
+  -1. switch_subject("科目名") → Switch to a subject (call before setup_review for new subjects)
+  -0.5. list_subjects() → List all existing subjects with progress info
   0. setup_review(exam_date, daily_hours, chapter_weights?) → state
   1. Use pdf-mcp's pdf_read_all to extract text from PDF (or other tools for DOCX/MD)
   2. parse_material(text) → chapters (AI reads them, identifies knowledge points)
@@ -72,11 +78,38 @@ AI responsibilities: identifying knowledge points from parsed text, generating q
 Tool responsibilities: state, parsing, scoring math, topological sort, schedule generation, priority ranking.
 
 Additional tools:
+  - switch_subject(subject) → switch to a subject-specific state directory
+  - list_subjects() → list all subjects with exam date and progress
+
   - patch_topic(topic_id, level?, attributes_merge?, source?) → incrementally update a single topic
     Use when the user wants to add/correct a key point without re-syncing all topics.
   - generate_review_doc(sort_by?) -> Markdown review document (chapter or learning_order)
   - get_question_bank(topic_ids?) -> Topics with examples/homework_refs""",
 )
+
+
+# ─── Tool 0: switch_subject ────────────────────────────────────
+
+
+@mcp.tool()
+def switch_subject(subject: str) -> str:
+    """Switch to a subject-specific state directory. Each subject has independent state, chapters, topics, and progress. Call this before setup_review to start a new subject, or to switch back to an existing one. Does NOT create state — call setup_review after switching to a new subject.
+
+    Args:
+        subject: Subject name (e.g., "高数", "线性代数"). Used as directory name under ~/.exam-review/
+    """
+    result = _switch_subject(subject)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
+# ─── Tool 0.5: list_subjects ───────────────────────────────────
+
+
+@mcp.tool()
+def list_subjects() -> str:
+    """List all subjects that have been set up. Returns subject names with exam date and progress info."""
+    result = _list_subjects()
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 # ─── Tool 1: setup_review ──────────────────────────────────────
