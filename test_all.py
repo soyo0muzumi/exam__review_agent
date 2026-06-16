@@ -383,6 +383,12 @@ qb_filtered_empty = json.loads(get_question_bank(topic_ids=["nonexistent_id"]))
 assert qb_filtered_empty["total_topics_with_examples"] == 0
 print("  get_question_bank (filter) OK")
 
+# Verify examples and homework appear in review doc after patch
+doc_with_examples = generate_review_doc(sort_by="chapter")
+assert "例题" in doc_with_examples or "例3.1" in doc_with_examples
+assert "作业" in doc_with_examples or "习题3.2" in doc_with_examples
+print("  generate_review_doc (with examples/homework) OK")
+
 # Cleanup
 reset_state()
 
