@@ -82,7 +82,7 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 | `patch_topic` | topic_id, level?, attributes_merge?, source? | Updated topic | Incrementally update a single topic (merge semantics) |
 | `generate_plan` | (uses current state) | Priority list + daily schedule + weak summary | Generate final review plan |
 | `generate_review_doc` | sort_by? (chapter/learning_order) | Markdown review document | Generate review document organized by chapter or learning order |
-| `get_question_bank` | topic_ids? | JSON with topics that have examples/homework_refs | Show available examples and homework references |
+| `get_question_bank` | topic_ids? | JSON with topics that have examples, homework_refs, or methods | Show available examples, methods, and homework references |
 
 ## Workflow
 
@@ -93,7 +93,7 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 1. pdf-mcp pdf_read_all → Extract PDF text (or other tools for DOCX/MD)
 2. parse_material       → Split text into chapters
 3. sync_topics          → AI submits knowledge points → tool scores & sorts
-   (Each topic can include attributes and source)
+   (Each topic can include attributes and source — see Attributes Schema below)
 4. get_next_topic       → Get next topic with attributes & source
    → AI asks question
    → record_answer      → Record result
@@ -118,6 +118,23 @@ This is the **sole sorting standard**. No overrides.
 ## State
 
 Persisted to `~/.exam-review/state.json`. Resumes automatically on next session.
+
+## Attributes Schema
+
+Each topic's `attributes` dict uses these recommended keys:
+
+| Key | Label | Description |
+|-----|-------|-------------|
+| `formulas` | 公式 | Core formulas, theorems, laws |
+| `definitions` | 定义 | Key definitions, concepts |
+| `parameters` | 参数 | Parameters with physical/math meaning |
+| `methods` | 方法 | Methods, procedures, algorithms (encoding/decoding, proof, derivation, solution steps) |
+| `pitfalls` | 易错 | Common misconceptions |
+| `examples` | 例题 | Typical example problems |
+| `homework_refs` | 作业 | Homework/exercise references |
+| `distinctions` | 区别 | Comparisons and disambiguations |
+
+The type is `dict[str, list[str]]` — any key is accepted, but the 8 keys above have Chinese labels in generated output. Keys other than these 8 render with the raw key name.
 
 ## Modes
 
@@ -210,7 +227,7 @@ python -m exam_review.server
 | `patch_topic` | topic_id, level?, attributes_merge?, source? | 更新后的知识点 | 增量更新单个知识点（合并语义） |
 | `generate_plan` | （使用当前状态） | 优先级列表 + 每日计划 + 薄弱总结 | 生成最终复习计划 |
 | `generate_review_doc` | sort_by? (chapter/learning_order) | Markdown 复习文档 | 按章节或学习顺序生成复习手册 |
-| `get_question_bank` | topic_ids? | 包含例题/作业的知识点 JSON | 展示可用的例题和作业题目 |
+| `get_question_bank` | topic_ids? | 包含例题、方法或作业的知识点 JSON | 展示可用的例题、方法和作业题目 |
 
 ## 工作流
 
@@ -221,7 +238,7 @@ python -m exam_review.server
 1. pdf-mcp pdf_read_all → 提取 PDF 文本（DOCX/MD 用其他工具）
 2. parse_material       → 按章节切分文本
 3. sync_topics          → AI 提交知识点 → 工具评分排序
-   （每个知识点可包含 attributes 和 source）
+   （每个知识点可包含 attributes 和 source — 见下方属性 Schema）
 4. get_next_topic       → 获取下一个待测知识点（含 attributes & source）
    → AI 出题
    → record_answer      → 记录结果
@@ -246,6 +263,23 @@ python -m exam_review.server
 ## 状态
 
 持久化到 `~/.exam-review/state.json`，下次会话自动恢复。
+
+## 属性 Schema
+
+每个知识点的 `attributes` 字典推荐使用以下键：
+
+| 键 | 中文标签 | 说明 |
+|----|---------|------|
+| `formulas` | 公式 | 核心公式、定理、定律 |
+| `definitions` | 定义 | 关键定义、概念 |
+| `parameters` | 参数 | 参数及其物理/数学含义 |
+| `methods` | 方法 | 方法、步骤、算法（编码/译码、证明、推导、解题步骤） |
+| `pitfalls` | 易错 | 常见误解 |
+| `examples` | 例题 | 典型例题 |
+| `homework_refs` | 作业 | 作业题号 |
+| `distinctions` | 区别 | 对比辨析 |
+
+类型为 `dict[str, list[str]]`，接受任意键，但以上 8 个键在生成输出时有中文标签。其他键直接显示原始键名。
 
 ## 模式
 

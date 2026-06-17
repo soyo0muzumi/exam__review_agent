@@ -297,6 +297,23 @@ assert updated_lr["attributes"] == {"formulas": ["新公式"], "definitions": ["
 assert updated_lr["source"] == "新的原文"
 print("  sync_topics REPLACE semantics OK")
 
+# Test sync_topics with new attribute keys (methods, parameters, distinctions)
+conv_topic = {"name": "卷积码", "level": "B", "chapter": "第6章", "depends_on": [],
+              "attributes": {
+                  "definitions": ["有记忆编码"],
+                  "parameters": ["约束长度K=3", "码率R=1/2"],
+                  "methods": ["Viterbi译码步骤：1.构建网格 2.计算路径度量 3.回溯"],
+                  "distinctions": ["卷积码 vs 分组码：前者有记忆，后者无记忆"],
+              },
+              "source": "有记忆编码。Viterbi译码。广泛用于数字通信。"}
+sync_conv = json.loads(sync_topics(topics=[conv_topic]))
+assert sync_conv["added"] == 1
+conv_data = next(t for t in sync_conv["topics"] if t["name"] == "卷积码")
+assert conv_data["attributes"]["methods"] == ["Viterbi译码步骤：1.构建网格 2.计算路径度量 3.回溯"]
+assert conv_data["attributes"]["parameters"] == ["约束长度K=3", "码率R=1/2"]
+assert conv_data["attributes"]["distinctions"] == ["卷积码 vs 分组码：前者有记忆，后者无记忆"]
+print("  sync_topics (new attribute keys) OK")
+
 # Get next topic
 next_topic = json.loads(get_next_topic())
 assert next_topic["level"] == "A"
@@ -350,7 +367,7 @@ print(f"  Remaining topic: {done_check}")
 # Generate plan
 plan_result = json.loads(generate_plan())
 assert "priority_list" in plan_result
-assert len(plan_result["priority_list"]) == 4
+assert len(plan_result["priority_list"]) == 5
 assert "daily_schedule" in plan_result
 print(f"  generate_plan OK: {len(plan_result['priority_list'])} topics")
 
@@ -366,21 +383,33 @@ assert "练习记录" in doc_lo
 print("  generate_review_doc (learning_order) OK")
 
 # Test get_question_bank
-qb_empty = json.loads(get_question_bank())
-assert qb_empty["total_topics_with_examples"] == 0
-print("  get_question_bank (empty) OK")
+# 卷积码 has methods — it already appears in question bank
+qb_before = json.loads(get_question_bank())
+assert qb_before["total_topics_with_examples"] == 1  # 卷积码 (has methods)
+print("  get_question_bank (with methods only) OK")
 
 # Patch a topic to add examples
 patch_topic(topic_id=lr_id, attributes_merge={"examples": ["例3.1: 求回归方程"], "homework_refs": ["习题3.2"]})
 qb_result = json.loads(get_question_bank())
-assert qb_result["total_topics_with_examples"] == 1
-assert qb_result["topics_with_examples"][0]["topic_id"] == lr_id
-assert "习题3.2" in qb_result["topics_with_examples"][0]["homework_refs"]
+assert qb_result["total_topics_with_examples"] == 2  # 卷积码 (methods) + 线性回归 (examples+homework)
+lr_entry = next(t for t in qb_result["topics_with_examples"] if t["topic_id"] == lr_id)
+assert "习题3.2" in lr_entry["homework_refs"]
 print("  get_question_bank (with data) OK")
+
+# Test get_question_bank includes topics with methods
+conv_id = "卷积码"
+qb_conv = json.loads(get_question_bank())
+# 卷积码 has "methods" but no "examples" or "homework_refs" — should still appear
+conv_in_qb = any(t["topic_id"] == conv_id for t in qb_conv["topics_with_examples"])
+assert conv_in_qb, "Topic with methods should appear in question bank"
+conv_entry = next(t for t in qb_conv["topics_with_examples"] if t["topic_id"] == conv_id)
+assert "methods" in conv_entry
+assert "Viterbi" in conv_entry["methods"][0]
+print("  get_question_bank (methods trigger) OK")
 
 # Filter by topic_ids
 qb_filtered = json.loads(get_question_bank(topic_ids=[lr_id]))
-assert qb_filtered["total_topics_with_examples"] == 1
+assert qb_filtered["total_topics_with_examples"] == 1  # only 线性回归
 qb_filtered_empty = json.loads(get_question_bank(topic_ids=["nonexistent_id"]))
 assert qb_filtered_empty["total_topics_with_examples"] == 0
 print("  get_question_bank (filter) OK")
@@ -390,6 +419,12 @@ doc_with_examples = generate_review_doc(sort_by="chapter")
 assert "例题" in doc_with_examples or "例3.1" in doc_with_examples
 assert "作业" in doc_with_examples or "习题3.2" in doc_with_examples
 print("  generate_review_doc (with examples/homework) OK")
+
+# Verify new attribute keys render with Chinese labels
+assert "方法" in doc_with_examples or "Viterbi" in doc_with_examples
+assert "参数" in doc_with_examples or "约束长度" in doc_with_examples
+assert "区别" in doc_with_examples or "分组码" in doc_with_examples
+print("  generate_review_doc (new keys: 方法/参数/区别) OK")
 
 # ─── 9. Test multi-subject isolation ───────────────────────────
 

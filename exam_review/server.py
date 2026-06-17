@@ -195,8 +195,11 @@ def sync_topics(topics: list[dict]) -> str:
     Args:
         topics: List of topic dicts. Each must have "name" and "level" (A/B/C). Optional: "chapter", "depends_on" (list of other topic names), "attributes" (dict of semantic-type→list[str]), "source" (relevant textbook excerpt for this topic).
             Recommended attributes keys:
-              "formulas"      — core formulas
-              "definitions"   — key definitions
+              "formulas"      — core formulas and theorems
+              "definitions"   — key definitions and concepts
+              "parameters"    — parameters and their physical/math meaning
+              "methods"       — methods, procedures, algorithms (encoding/decoding, proof,
+                                derivation, solution steps — any "how-to")
               "pitfalls"      — common misconceptions
               "examples"      — example problems. Prioritize textbook "例"/"例题" markers.
                                 If textbook lacks examples, AI may call web_search for supplementary
@@ -205,6 +208,7 @@ def sync_topics(topics: list[dict]) -> str:
               "homework_refs" — homework/exercise references. Same sourcing rules as examples:
                                 textbook first, web_search with confirmation + attribution second,
                                 never fabricated.
+              "distinctions"  — comparisons and disambiguations (易混淆概念对比)
     """
     state = load_state()
     if state is None:
@@ -477,10 +481,10 @@ def generate_review_doc(
 def get_question_bank(
     topic_ids: list[str] | None = None,
 ) -> str:
-    """Return topics that have examples or homework references in their attributes. Structured JSON for AI to reference when generating questions.
+    """Return topics that have actionable content for question generation. Returns examples, homework references, and methods (encoding/decoding procedures, solution strategies, algorithms). Structured JSON for AI to reference when generating review guides and practice questions.
 
     Args:
-        topic_ids: Optional list of topic IDs to filter. If None, returns all topics with examples/homework_refs.
+        topic_ids: Optional list of topic IDs to filter. If None, returns all topics with actionable content.
     """
     state = load_state()
     if state is None or not state.topics:
@@ -491,18 +495,18 @@ def get_question_bank(
         id_set = set(topic_ids)
         topics = [t for t in topics if t.id in id_set]
 
+    action_keys = ("examples", "homework_refs", "methods")
     result_topics = []
     for t in topics:
-        examples = t.attributes.get("examples", [])
-        homework = t.attributes.get("homework_refs", [])
-        if examples or homework:
-            result_topics.append({
-                "topic_id": t.id,
-                "name": t.name,
-                "chapter": t.chapter,
-                "examples": examples,
-                "homework_refs": homework,
-            })
+        result_data = {"topic_id": t.id, "name": t.name, "chapter": t.chapter}
+        has_content = False
+        for key in action_keys:
+            vals = t.attributes.get(key, [])
+            if vals:
+                result_data[key] = vals
+                has_content = True
+        if has_content:
+            result_topics.append(result_data)
 
     return json.dumps(
         {

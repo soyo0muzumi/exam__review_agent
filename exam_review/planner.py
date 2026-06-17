@@ -232,9 +232,12 @@ def render_review_doc(
                 key_labels = {
                     "formulas": "公式",
                     "definitions": "定义",
+                    "parameters": "参数",
+                    "methods": "方法",
                     "pitfalls": "易错",
                     "examples": "例题",
                     "homework_refs": "作业",
+                    "distinctions": "区别",
                 }
                 for key, vals in t.attributes.items():
                     label = key_labels.get(key, key)
