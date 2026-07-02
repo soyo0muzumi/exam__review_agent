@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from .models import DailyPlanItem, PlanResult, Topic
+from .diagnostic import (
+    calculate_chapter_progress as _calc_chapter_progress,
+    check_mastery_decay as _check_decay,
+    suggest_question_type as _suggest_qtype,
+)
+from .models import ChapterProgress, DailyPlanItem, PlanResult, PracticeRecord, Topic
 
 
 def priority_score(topic: Topic) -> float:
@@ -26,22 +31,33 @@ def generate_plan(
     daily_hours: float,
     mode: str = "normal",
     learning_order: list[str] | None = None,
+    practice_history: list[PracticeRecord] | None = None,
 ) -> PlanResult:
     """Generate the final review plan."""
+    practice_history = practice_history or []
     sorted_topics = sorted(topics, key=priority_score, reverse=True)
     learning_order = learning_order or [t.id for t in sorted_topics]
 
-    priority_list = [
-        {
-            "id": t.id,
-            "name": t.name,
-            "level": t.level,
-            "importance": round(t.importance, 2),
-            "status": t.status,
-            "priority": round(priority_score(t), 2),
-        }
-        for t in sorted_topics
-    ]
+    # mastery_decay: read-only, applied to priority_list output only
+    # (topic.status is NEVER modified)
+    priority_list = []
+    for t in sorted_topics:
+        decayed = _check_decay(t, practice_history)
+        effective_status = "learning" if decayed == "decayed" else t.status
+        priority_list.append(
+            {
+                "id": t.id,
+                "name": t.name,
+                "level": t.level,
+                "importance": round(t.importance, 2),
+                "status": effective_status,
+                "priority": round(priority_score(t), 2),
+                "question_type": _suggest_qtype(t),
+            }
+        )
+
+    # chapter_progress — NEW
+    chapter_progress = _calc_chapter_progress(topics, learning_order)
 
     if mode == "quick":
         daily_schedule = []
@@ -55,6 +71,7 @@ def generate_plan(
     weak_summary = _build_weak_summary(sorted_topics)
 
     return PlanResult(
+        chapter_progress=chapter_progress,
         priority_list=priority_list,
         daily_schedule=daily_schedule,
         weak_summary=weak_summary,
