@@ -194,6 +194,8 @@ def render_review_doc(
     practice_history: list,
     learning_order: list[str] | None = None,
     sort_by: str = "chapter",
+    format: str = "detailed",
+    reference_date: date | None = None,
 ) -> str:
     """Render a Markdown review document from current state."""
     status_emoji = {
@@ -228,6 +230,8 @@ def render_review_doc(
         sorted_groups = [("学习顺序", sorted_topics)]
 
     today = date.today().isoformat()
+    if format == "quickref":
+        return _render_quickref(topics, practice_history, learning_order, reference_date)
     lines = [f"# 复习手册 — {today}", ""]
 
     for group_name, group_topics in sorted_groups:
@@ -273,5 +277,97 @@ def render_review_doc(
             lines.append("")
             lines.append("---")
             lines.append("")
+
+    return "\n".join(lines)
+
+
+def _render_quickref(
+    topics: list[Topic],
+    practice_history: list,
+    learning_order: list[str] | None = None,
+    reference_date: date | None = None,
+) -> str:
+    """Render a compact quick-reference table. Weak-first within each chapter."""
+    status_emoji = {
+        "weak": "\U0001f534",
+        "learning": "\U0001f7e1",
+        "mastered": "\U0001f7e2",
+        "unknown": "⚪",
+    }
+
+    # Index practice history by topic_id
+    history_by_topic: dict[str, list[tuple[str, str]]] = {}
+    for rec in practice_history:
+        history_by_topic.setdefault(rec.topic_id, []).append((rec.date, rec.result))
+
+    # Dependency status map
+    id_to_topic = {t.id: t for t in topics}
+
+    # Group by chapter
+    chapters: dict[str, list[Topic]] = {}
+    no_chapter: list[Topic] = []
+    for t in topics:
+        if t.chapter:
+            chapters.setdefault(t.chapter, []).append(t)
+        else:
+            no_chapter.append(t)
+
+    ref = reference_date or date.today()
+    lines = [f"# 速查表 — {ref.isoformat()}", ""]
+
+    def _topic_context(t: Topic) -> str:
+        """Build context column: dependency status + last practice."""
+        parts = []
+        # Dependency status
+        if t.depends_on:
+            dep_statuses = []
+            for dep_id in t.depends_on:
+                dep = id_to_topic.get(dep_id)
+                if dep:
+                    dep_statuses.append(f"{dep.name}:{status_emoji.get(dep.status, '⚪')}")
+            if dep_statuses:
+                parts.append("依赖: " + " ".join(dep_statuses))
+        # Last practice
+        recs = history_by_topic.get(t.id, [])
+        if recs:
+            last_date = max(r[0] for r in recs)
+            parts.append(f"上次练习: {last_date}")
+        return " | ".join(parts) if parts else "-"
+
+    def _core_content(t: Topic) -> str:
+        """Extract core formulas/definitions as a compact string."""
+        attrs = t.attributes or {}
+        items = []
+        for key in ("formulas", "definitions", "parameters"):
+            vals = attrs.get(key, [])
+            items.extend(vals[:2])  # max 2 per key to keep table compact
+        if not items:
+            return "-"
+        result = "; ".join(items)
+        # Escape pipe characters
+        result = result.replace("|", "\\|")
+        return result
+
+    sorted_groups: list[tuple[str, list[Topic]]] = []
+    for ch_name in sorted(chapters.keys()):
+        # Weak-first within each chapter
+        ch_topics = sorted(chapters[ch_name], key=lambda t: (0 if t.status == "weak" else 1, t.name))
+        sorted_groups.append((ch_name, ch_topics))
+    if no_chapter:
+        sorted_groups.append(("未分类", sorted(no_chapter, key=lambda t: (0 if t.status == "weak" else 1, t.name))))
+
+    for group_name, group_topics in sorted_groups:
+        lines.append(f"## {group_name}")
+        lines.append("")
+        lines.append("| 知识点 | 核心公式/定义 | 题型 | 状态 | 上下文 |")
+        lines.append("|-------|-------------|------|------|-------|")
+        for t in group_topics:
+            name_safe = t.name.replace("|", "\\|")
+            content = _core_content(t)
+            qtype = _suggest_qtype(t)
+            emoji = status_emoji.get(t.status, "⚪")
+            ctx = _topic_context(t)
+            lines.append(f"| {name_safe} | {content} | {qtype} | {emoji} {t.status} | {ctx} |")
+        lines.append("")
 
     return "\n".join(lines)
