@@ -168,3 +168,64 @@ def check_mastery_decay(
     if (ref - last_date).days > decay_days:
         return "decayed"
     return "stable"
+
+
+def detect_knowledge_gaps(
+    topics: list[Topic],
+    expected_topics: list[dict],
+) -> dict:
+    current_names = {t.name.lower(): t for t in topics}
+    coverage_keys = {"formulas", "definitions", "methods", "distinctions", "pitfalls"}
+    missing = []
+    partial = []
+    present = 0
+
+    for expected in expected_topics:
+        name = expected.get("name", "")
+        name_lower = name.lower()
+        if not name:
+            continue
+
+        if name_lower in current_names:
+            topic = current_names[name_lower]
+            attrs = topic.attributes or {}
+            existing_attrs = [k for k in coverage_keys if attrs.get(k)]
+            missing_attrs = [k for k in coverage_keys if not attrs.get(k)]
+            if missing_attrs:
+                partial.append({
+                    "name": topic.name,
+                    "existing_attrs": existing_attrs,
+                    "missing_attrs": missing_attrs,
+                    "suggestion": f"{topic.name}缺少" + "、".join(missing_attrs),
+                })
+            else:
+                present += 1
+        else:
+            matched = None
+            for cn in current_names:
+                if name_lower in cn or cn in name_lower:
+                    matched = current_names[cn]
+                    break
+            if matched:
+                attrs = matched.attributes or {}
+                existing_attrs = [k for k in coverage_keys if attrs.get(k)]
+                missing_attrs = [k for k in coverage_keys if not attrs.get(k)]
+                partial.append({
+                    "name": matched.name,
+                    "existing_attrs": existing_attrs,
+                    "missing_attrs": missing_attrs,
+                    "suggestion": f"名称相似: 期望'{name}'，实际'{matched.name}'",
+                })
+            else:
+                missing.append({
+                    "name": name,
+                    "level": expected.get("level", "C"),
+                    "chapter": expected.get("chapter", ""),
+                })
+
+    return {
+        "missing": missing,
+        "partial": partial,
+        "present": present,
+        "total_expected": len(expected_topics),
+    }
