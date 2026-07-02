@@ -372,8 +372,8 @@ def get_next_topic(
     if filter == "untested":
         next_topic = get_next_untested(state.topics, tested_ids, mode)
     else:
-        # Return next weak/learning topic for re-testing (exclude already tested in this round)
-        next_topic = get_next_for_retest(state.topics, tested_ids)
+        # "all": return ANY weak/learning topic for re-testing, even if already tested
+        next_topic = get_next_for_retest(state.topics, set())
 
     if next_topic is None:
         return json.dumps({"done": True, "message": "所有 A 级知识点已测试完毕。"})
