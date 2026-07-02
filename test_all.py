@@ -692,6 +692,111 @@ set_state_path(tmp_dir / "state.json")
 
 print("  Phase A integration OK")
 
+# --- 12. Test Phase B: source material quality ---
+
+print("=== Test 12: Phase B -- source material quality ===")
+
+import shutil
+from exam_review.diagnostic import detect_knowledge_gaps as _detect_gaps
+
+# Topic.material_sources field
+t1 = Topic(id="t1", name="导数", level="A", importance=0.85, material_sources=["教材A"])
+assert t1.material_sources == ["教材A"]
+t2 = Topic(id="t2", name="积分", level="A", importance=0.85)
+assert t2.material_sources == []
+print("  Topic.material_sources OK")
+
+# detect_knowledge_gaps: all scenarios
+topics = [
+    Topic(id="a", name="导数", level="A", importance=0.85, status="mastered",
+          attributes={
+              "formulas": ["f'(x)"],
+              "definitions": ["导数定义"],
+              "methods": ["求导法则"],
+              "distinctions": ["导数与微分"],
+              "pitfalls": ["链式法则"],
+          }),
+    Topic(id="b", name="积分", level="A", importance=0.85, status="learning",
+          attributes={"formulas": ["integral f(x) dx"]}),
+]
+expected = [
+    {"name": "导数", "level": "A", "chapter": "第1章"},
+    {"name": "积分", "level": "A", "chapter": "第2章"},
+    {"name": "泰勒展开", "level": "A", "chapter": "第3章"},
+]
+result = _detect_gaps(topics, expected)
+assert result["total_expected"] == 3
+assert len(result["missing"]) == 1
+assert result["missing"][0]["name"] == "泰勒展开"
+assert result["present"] == 1
+assert len(result["partial"]) == 1
+assert result["partial"][0]["name"] == "积分"
+assert "definitions" in result["partial"][0]["missing_attrs"]
+print("  detect_knowledge_gaps basic OK")
+
+# Empty topics
+result_empty = _detect_gaps([], expected)
+assert len(result_empty["missing"]) == 3
+assert result_empty["present"] == 0
+print("  detect_knowledge_gaps empty state OK")
+
+# Empty expected
+result_no_exp = _detect_gaps(topics, [])
+assert result_no_exp["total_expected"] == 0
+assert result_no_exp["missing"] == []
+print("  detect_knowledge_gaps empty expected OK")
+
+# Case-insensitive matching
+topics_case = [Topic(id="tl", name="泰勒展开", level="A", importance=0.85,
+      attributes={
+          "formulas": ["f(x) = sum"],
+          "definitions": ["泰勒公式"],
+          "methods": ["展开方法"],
+          "distinctions": ["泰勒vs麦克劳林"],
+          "pitfalls": ["收敛域"],
+      })]
+result_case = _detect_gaps(topics_case, [{"name": "泰勒展开"}, {"name": "taylor"}])
+assert result_case["present"] == 1
+print("  detect_knowledge_gaps case-insensitive OK")
+
+# sync_topics with material_id (server integration)
+reset_state()
+tmp_phaseb = Path(tempfile.mkdtemp())
+set_state_path(tmp_phaseb / "state.json")
+setup_review(exam_date="2026-08-15", daily_hours=3, mode="normal")
+
+sr1 = json.loads(sync_topics(topics=[{"name": "导数", "level": "A", "chapter": "第1章",
+    "attributes": {
+        "formulas": ["f'(x)"],
+        "definitions": ["导数定义"],
+        "methods": ["求导法则"],
+        "distinctions": ["导数与微分"],
+        "pitfalls": ["链式法则"],
+    }}], material_id="教材A"))
+assert sr1["material_id"] == "教材A"
+assert sr1["topics"][0]["material_sources"] == ["教材A"]
+print("  sync_topics with material_id OK")
+
+sr2 = json.loads(sync_topics(topics=[{"name": "导数", "level": "A", "chapter": "第1章"}], material_id="教材B"))
+daoju = next(t for t in sr2["topics"] if t["id"] == "导数")
+assert daoju["material_sources"] == ["教材A", "教材B"]
+print("  sync_topics material_sources append OK")
+
+sr3 = json.loads(sync_topics(topics=[{"name": "导数", "level": "A", "chapter": "第1章"}], material_id="教材A"))
+daoju3 = next(t for t in sr3["topics"] if t["id"] == "导数")
+assert daoju3["material_sources"] == ["教材A", "教材B"]
+print("  sync_topics material_sources dedup OK")
+
+from exam_review.server import detect_knowledge_gaps as _server_gaps
+gaps = json.loads(_server_gaps(expected_topics=[{"name": "导数", "level": "A"}, {"name": "泰勒展开", "level": "A"}]))
+assert gaps["present"] == 1
+assert gaps["total_expected"] == 2
+print("  server detect_knowledge_gaps OK")
+
+shutil.rmtree(tmp_phaseb, ignore_errors=True)
+reset_state()
+print("  Phase B OK")
+
 # Cleanup
 reset_state()
 
