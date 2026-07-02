@@ -28,6 +28,7 @@ class Topic(BaseModel):
     depends_on: list[str] = Field(default_factory=list)
     attributes: dict[str, list[str]] = Field(default_factory=dict)
     source: str = ""
+    material_sources: list[str] = Field(default_factory=list)
 
 
 class PracticeRecord(BaseModel):
