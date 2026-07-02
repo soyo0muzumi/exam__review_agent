@@ -34,6 +34,19 @@ class PracticeRecord(BaseModel):
     topic_id: str
     date: str       # ISO format: "2026-06-16"
     result: Literal["mastered", "learning", "weak"]
+    question: str | None = None
+    user_answer: str | None = None
+    correct_answer: str | None = None
+
+
+class ChapterProgress(BaseModel):
+    chapter: str
+    total: int
+    mastered: int
+    learning: int
+    weak: int
+    untested: int
+    ready_to_learn: list[str]
 
 
 class ReviewState(BaseModel):
@@ -57,6 +70,7 @@ class DailyPlanItem(BaseModel):
 
 
 class PlanResult(BaseModel):
+    chapter_progress: list[ChapterProgress] = Field(default_factory=list)
     priority_list: list[dict]
     daily_schedule: list[DailyPlanItem]
     weak_summary: str
