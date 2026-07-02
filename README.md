@@ -1,6 +1,6 @@
 # Final Exam Review — MCP Server
 
-AI-powered exam review planner, delivered as an MCP Server with 11 tools.
+AI-powered exam review planner, delivered as an MCP Server with 13 tools.
 
 [English](#quick-start) | [中文](#快速开始)
 
@@ -31,7 +31,7 @@ Or use the CLI:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-Then restart Hermes Agent. The 11 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
+Then restart Hermes Agent. The 13 tools will auto-discover as `mcp_exam_review_*` and become available in every conversation.
 
 ### Configure Claude Code
 
@@ -68,7 +68,7 @@ python -m exam_review.server
 
 This starts the MCP server on stdio. Claude Code will connect automatically when configured.
 
-## Tools (11)
+## Tools (13)
 
 | Tool | Input | Output | Purpose |
 |------|-------|--------|---------|
@@ -76,12 +76,14 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 | `list_subjects` | (none) | List of subjects with exam_date and progress | List all subjects that have been set up |
 | `setup_review` | exam_date, daily_hours, chapter_weights?, mode? | State summary | Initialize/reset review state |
 | `parse_material` | text | chapters: [{name, text}] | Split text into chapter chunks (use pdf-mcp to extract PDF text first) |
-| `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}] | Scored topics + learning order | Submit all knowledge points, get scored list |
-| `record_answer` | topic_id, result (mastered/learning/weak) | Progress + fatigue flag | Record diagnostic result |
-| `get_next_topic` | filter? (untested/all) | Next A-level topic with attributes & source | Get next question target |
+| `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}], material_id | Scored topics + learning order + material_id | Submit all knowledge points with source tracking |
+| `detect_knowledge_gaps` | expected_topics: [{name, level?, chapter?}] | JSON with missing, partial, present & total_expected | Detect gaps by comparing current topics vs expected syllabus |
+| `record_answer` | topic_id, result (mastered/learning/weak), question?, user_answer?, correct_answer? | Progress + fatigue flag + Q&A stored | Record diagnostic result |
+| `get_next_topic` | filter? (untested/all) | Next A-level topic with attributes, source & suggested_question_type | Get next question target |
 | `patch_topic` | topic_id, level?, attributes_merge?, source? | Updated topic | Incrementally update a single topic (merge semantics) |
-| `generate_plan` | (uses current state) | Priority list + daily schedule + weak summary | Generate final review plan |
-| `generate_review_doc` | sort_by? (chapter/learning_order) | Markdown review document | Generate review document organized by chapter or learning order |
+| `generate_plan` | (uses current state) | Priority list + daily schedule + weak summary + chapter_progress | Generate final review plan |
+| `generate_review_doc` | sort_by? (chapter/learning_order), format? (detailed/quickref) | Markdown review document | Generate review document organized by chapter or learning order |
+| `generate_mistake_sheet` | (none) | Markdown mistake review | Generate mistake review from Q&A records |
 | `get_question_bank` | topic_ids? | JSON with topics that have examples, homework_refs, or methods | Show available examples, methods, and homework references |
 
 ## Workflow
@@ -92,7 +94,8 @@ This starts the MCP server on stdio. Claude Code will connect automatically when
 0. setup_review        → Set exam date & hours
 1. pdf-mcp pdf_read_all → Extract PDF text (or other tools for DOCX/MD)
 2. parse_material       → Split text into chapters
-3. sync_topics          → AI submits knowledge points → tool scores & sorts
+3. sync_topics(topics, material_id) → AI submits knowledge points → tool scores, sorts & tags sources
+   (Optional: detect_knowledge_gaps → Compare with expected syllabus to find missing topics)
    (Each topic can include attributes and source — see Attributes Schema below)
 4. get_next_topic       → Get next topic with attributes & source
    → AI asks question
@@ -138,7 +141,7 @@ The type is `dict[str, list[str]]` — any key is accepted, but the 8 keys above
 
 ## Modes
 
-- **normal**: Full 11-tool workflow
+- **normal**: Full 13-tool workflow
 - **cram**: ≤3 days to exam, tight packing, A-level only
 - **quick**: Priority list only, test first 3 A-level topics
 
@@ -176,7 +179,7 @@ mcp_servers:
 hermes mcp add exam-review --command python --args "-m,exam_review.server"
 ```
 
-然后重启 Hermes Agent，11 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
+然后重启 Hermes Agent，13 个工具会自动发现为 `mcp_exam_review_*` 前缀，在所有会话中均可使用。
 
 ### 配置 Claude Code
 
@@ -213,7 +216,7 @@ python -m exam_review.server
 
 服务通过 stdio 启动 MCP 协议，配置后 Claude Code 会自动连接。
 
-## 工具 (11)
+## 工具 (13)
 
 | 工具 | 输入 | 输出 | 用途 |
 |------|------|------|------|
@@ -221,12 +224,14 @@ python -m exam_review.server
 | `list_subjects` | （无） | 所有科目的列表及进度 | 列出所有已设置的科目 |
 | `setup_review` | exam_date, daily_hours, chapter_weights?, mode? | 状态摘要 | 初始化/重置复习状态 |
 | `parse_material` | text（纯文本） | chapters: [{name, text}] | 将文本按章节切分（PDF 需先通过 pdf-mcp 提取文本） |
-| `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}] | 评分后知识点 + 学习顺序 | 提交所有知识点，获取评分排序 |
-| `record_answer` | topic_id, result (mastered/learning/weak) | 进度 + 疲劳标记 | 记录诊断结果 |
-| `get_next_topic` | filter? (untested/all) | 下一个 A 级知识点（含 attributes & source） | 获取下一个测试目标 |
+| `sync_topics` | topics: [{name, level, chapter, depends_on?, attributes?, source?}], material_id | 评分后知识点 + 学习顺序 + material_id | 提交所有知识点，带来源追踪 |
+| `detect_knowledge_gaps` | expected_topics: [{name, level?, chapter?}] | JSON（missing, partial, present & total_expected） | 对比预期大纲，发现遗漏知识点 |
+| `record_answer` | topic_id, result (mastered/learning/weak), question?, user_answer?, correct_answer? | 进度 + 疲劳标记 + 存储 Q&A | 记录诊断结果 |
+| `get_next_topic` | filter? (untested/all) | 下一个 A 级知识点（含 attributes, source & suggested_question_type） | 获取下一个测试目标 |
 | `patch_topic` | topic_id, level?, attributes_merge?, source? | 更新后的知识点 | 增量更新单个知识点（合并语义） |
-| `generate_plan` | （使用当前状态） | 优先级列表 + 每日计划 + 薄弱总结 | 生成最终复习计划 |
-| `generate_review_doc` | sort_by? (chapter/learning_order) | Markdown 复习文档 | 按章节或学习顺序生成复习手册 |
+| `generate_plan` | （使用当前状态） | 优先级列表 + 每日计划 + 薄弱总结 + chapter_progress | 生成最终复习计划 |
+| `generate_review_doc` | sort_by? (chapter/learning_order), format? (detailed/quickref) | Markdown 复习文档 | 按章节或学习顺序生成复习手册 |
+| `generate_mistake_sheet` | （无） | Markdown 错题复习 | 从 Q&A 记录生成错题复习 |
 | `get_question_bank` | topic_ids? | 包含例题、方法或作业的知识点 JSON | 展示可用的例题、方法和作业题目 |
 
 ## 工作流
@@ -237,7 +242,8 @@ python -m exam_review.server
 0. setup_review        → 设置考试日期与每日学习时长
 1. pdf-mcp pdf_read_all → 提取 PDF 文本（DOCX/MD 用其他工具）
 2. parse_material       → 按章节切分文本
-3. sync_topics          → AI 提交知识点 → 工具评分排序
+3. sync_topics(topics, material_id) → AI 提交知识点 → 工具评分、排序并标记来源
+   （可选：detect_knowledge_gaps → 对比预期大纲，发现遗漏知识点）
    （每个知识点可包含 attributes 和 source — 见下方属性 Schema）
 4. get_next_topic       → 获取下一个待测知识点（含 attributes & source）
    → AI 出题
@@ -283,7 +289,7 @@ python -m exam_review.server
 
 ## 模式
 
-- **normal**：完整 11 工具工作流
+- **normal**：完整 13 工具工作流
 - **cram**：距离考试 ≤3 天，紧凑安排，仅 A 级知识点
 - **quick**：仅生成优先级列表，测试前 3 个 A 级知识点
 

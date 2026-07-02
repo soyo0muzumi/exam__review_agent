@@ -1,4 +1,4 @@
-"""MCP Server for exam review — 11 tools, minimal state, pure computation.
+"""MCP Server for exam review — 13 tools, minimal state, pure computation.
 
 Tools:
   0. switch_subject  — Switch to a subject-specific state directory
@@ -6,6 +6,7 @@ Tools:
   1. setup_review    — Initialize/reset state (exam date, hours, mode)
   2. parse_material  — Split text into chapter-based chunks (LLM extracts text first via pdf-mcp)
   3. sync_topics     — AI submits all knowledge points at once; tool scores + sorts
+  3.5 detect_knowledge_gaps — Compare current topics against expected syllabus
   4. record_answer   — Record diagnostic answer for a topic
   5. get_next_topic  — Get next untested A-level topic
   5.5 patch_topic    — Incrementally update a single topic
@@ -16,6 +17,7 @@ Tools:
 
 from __future__ import annotations
 
+from collections import defaultdict
 import json
 from datetime import date
 from typing import Literal
@@ -46,45 +48,45 @@ from .diagnostic import (
     get_a_level_topics,
     get_next_untested,
     get_next_for_retest,
+    suggest_question_type,
+    detect_knowledge_gaps as _detect_knowledge_gaps,
 )
 from .planner import generate_plan as _generate_plan
 from .planner import render_review_doc as _render_review_doc
 
 mcp = FastMCP(
     "exam-review",
-    instructions="""Final Exam Review MCP Server — 11 tools for AI study coaching.
+    instructions="""Final Exam Review MCP Server — tools for AI study coaching.
 
 ═══ AUTHORITY BOUNDARY ═══
-TOOL = single source of truth. AI = interface only.
+TOOL = source of truth. AI = interface only.
 AI MUST NOT: compute priority, modify scores, reorder topics, skip steps.
 AI CAN ONLY: extract knowledge points from text, ask questions, judge answers, present results.
-All scoring, sorting, and scheduling come exclusively from these tools. Do not override or second-guess tool output.
 ════════════════
 
 Workflow:
-  -1. switch_subject("科目名") → Switch to a subject (call before setup_review for new subjects)
-  -0.5. list_subjects() → List all existing subjects with progress info
-  0. setup_review(exam_date, daily_hours, chapter_weights?) → state
-  1. Use pdf-mcp's pdf_read_all to extract text from PDF (or other tools for DOCX/MD)
-  2. parse_material(text) → chapters (AI reads them, identifies knowledge points)
-  3. sync_topics(topics) → scored topics + learning order (AI does NOT recompute)
-     Each topic can include "attributes" (dict: type→list[str]) and "source" (textbook excerpt)
-  4. get_next_topic() → next A-level topic with attributes & source; AI asks question; record_answer(result)
-     Repeat until get_next_topic returns done:true
-  5. generate_plan() → priority list + daily schedule + weak summary
-  6. (Optional) get_next_topic(filter="all") → re-test weak topics; repeat from 4
+  -1. switch_subject("科目名")
+  -0.5. list_subjects()
+  0. setup_review(exam_date, daily_hours, chapter_weights?)
+  1. Use pdf-mcp's pdf_read_all to extract text from PDF
+  2. parse_material(text) → chapters
+  3. sync_topics(topics, material_id) → scored topics + learning order
+  4. get_next_topic() → next A-level topic with suggested_question_type & attributes & source; AI asks question matching type; record_answer(result, question?, user_answer?, correct_answer?)
+  5. generate_plan() → priority list + daily schedule + weak summary + chapter_progress
 
-AI responsibilities: identifying knowledge points from parsed text, generating questions, judging answers.
-Tool responsibilities: state, parsing, scoring math, topological sort, schedule generation, priority ranking.
+Question types (from suggested_question_type):
+  fill_blank   → fill-in-the-blank (formulas, atomic facts)
+  short_answer → short answer (definitions, concepts)
+  calculation  → step-by-step computation (methods, algorithms)
+  mcq          → multiple choice (distinctions only)
+
+Present chapter_progress FIRST (ALEKS Pie), then priority_list.
 
 Additional tools:
-  - switch_subject(subject) → switch to a subject-specific state directory
-  - list_subjects() → list all subjects with exam date and progress
-
-  - patch_topic(topic_id, level?, attributes_merge?, source?) → incrementally update a single topic
-    Use when the user wants to add/correct a key point without re-syncing all topics.
-  - generate_review_doc(sort_by?) -> Markdown review document (chapter or learning_order)
-  - get_question_bank(topic_ids?) -> Topics with examples/homework_refs""",
+  switch_subject(subject), list_subjects(), patch_topic(...),
+  detect_knowledge_gaps(expected_topics),
+  generate_review_doc(sort_by?, format?), get_question_bank(topic_ids?),
+  generate_mistake_sheet() → Markdown mistake review""",
 )
 
 
@@ -189,7 +191,7 @@ def parse_material(text: str) -> str:
 
 
 @mcp.tool()
-def sync_topics(topics: list[dict]) -> str:
+def sync_topics(topics: list[dict], material_id: str) -> str:
     """Submit all knowledge points at once. This is the ONLY way to set topics. AI identifies topics from parsed text, assigns levels, and lists dependencies. The tool auto-calculates importance and learning order. Calling again ADDS new topics and UPDATES metadata of existing ones (name, level, chapter, depends_on, attributes, source), but does NOT recompute importance of already-scored topics. Note: attributes and source are REPLACED on update, not merged — use patch_topic for incremental changes.
 
     Args:
@@ -209,6 +211,8 @@ def sync_topics(topics: list[dict]) -> str:
                                 textbook first, web_search with confirmation + attribution second,
                                 never fabricated.
               "distinctions"  — comparisons and disambiguations (易混淆概念对比)
+        material_id: Unique identifier for the source material (e.g. textbook title, course
+                     name). Tracked in each topic's material_sources list for gap detection.
     """
     state = load_state()
     if state is None:
@@ -245,6 +249,9 @@ def sync_topics(topics: list[dict]) -> str:
             # Update source only if provided and non-empty
             if t.get("source"):
                 existing.source = t["source"]
+            # Track material provenance
+            if material_id not in existing.material_sources:
+                existing.material_sources.append(material_id)
             updated += 1
         else:
             new_topics.append(
@@ -258,6 +265,7 @@ def sync_topics(topics: list[dict]) -> str:
                     depends_on=depends_on,
                     attributes=t.get("attributes", {}),
                     source=t.get("source", ""),
+                    material_sources=[material_id],
                 )
             )
             added += 1
@@ -281,6 +289,7 @@ def sync_topics(topics: list[dict]) -> str:
         {
             "added": added,
             "updated": updated,
+            "material_id": material_id,
             "topic_version": state.topic_version,
             "topics": [t.model_dump() for t in state.topics],
             "learning_order": state.learning_order,
@@ -290,6 +299,32 @@ def sync_topics(topics: list[dict]) -> str:
     )
 
 
+# ─── Tool 3.5: detect_knowledge_gaps ───────────────────────────────
+
+
+@mcp.tool()
+def detect_knowledge_gaps(expected_topics: list[dict]) -> str:
+    """Detect gaps by comparing current topics against an expected topic list. AI provides the expected syllabus from LLM subject knowledge; tool returns structured diff.
+
+    Args:
+        expected_topics: List of expected topic dicts, each with "name" (required), optional "level" (A/B/C) and "chapter".
+
+    Returns JSON with missing, partial, present breakdown. Pure computation — no AI judgment.
+    """
+    state = load_state()
+    if state is None or not state.topics:
+        missing = [
+            {"name": et["name"], "level": et.get("level", "C"), "chapter": et.get("chapter", "")}
+            for et in expected_topics if et.get("name")
+        ]
+        return json.dumps({
+            "missing": missing, "partial": [], "present": 0,
+            "total_expected": len(expected_topics),
+        }, ensure_ascii=False, indent=2)
+    result = _detect_knowledge_gaps(state.topics, expected_topics)
+    return json.dumps(result, ensure_ascii=False, indent=2)
+
+
 # ─── Tool 4: record_answer ────────────────────────────────────
 
 
@@ -297,12 +332,18 @@ def sync_topics(topics: list[dict]) -> str:
 def record_answer(
     topic_id: str,
     result: Literal["mastered", "learning", "weak"],
+    question: str | None = None,
+    user_answer: str | None = None,
+    correct_answer: str | None = None,
 ) -> str:
     """Record diagnostic result for a topic. AI judges the user's answer quality and calls this with the assessment.
 
     Args:
         topic_id: The topic ID that was tested.
         result: AI's assessment — "mastered", "learning", or "weak".
+        question: Optional question text that was asked.
+        user_answer: Optional answer given by the user.
+        correct_answer: Optional correct answer for reference.
     """
     state = load_state()
     if state is None:
@@ -316,7 +357,14 @@ def record_answer(
     if topic_id not in state.tested_topic_ids:
         state.tested_topic_ids.append(topic_id)
     state.practice_history.append(
-        PracticeRecord(topic_id=topic_id, date=date.today().isoformat(), result=result)
+        PracticeRecord(
+            topic_id=topic_id,
+            date=date.today().isoformat(),
+            result=result,
+            question=question,
+            user_answer=user_answer,
+            correct_answer=correct_answer,
+        )
     )
     save_state(state)
 
@@ -360,14 +408,30 @@ def get_next_topic(
     if filter == "untested":
         next_topic = get_next_untested(state.topics, tested_ids, mode)
     else:
-        # Return next weak/learning topic for re-testing (exclude already tested in this round)
-        next_topic = get_next_for_retest(state.topics, tested_ids)
+        # "all": return ANY weak/learning topic for re-testing, even if already tested
+        # Cycle protection: skip the last-returned topic to avoid infinite loops
+        candidates = set()
+        if state.last_retest_topic_id:
+            candidates = {t.id for t in state.topics if t.id != state.last_retest_topic_id}
+        next_topic = get_next_for_retest(state.topics, candidates)
+        if next_topic is None and state.last_retest_topic_id:
+            # Only the excluded topic remains — allow it
+            next_topic = get_next_for_retest(state.topics, set())
+        state.last_retest_topic_id = next_topic.id if next_topic else None
+        save_state(state)
 
     if next_topic is None:
         return json.dumps({"done": True, "message": "所有 A 级知识点已测试完毕。"})
 
     return json.dumps(
-        {"topic_id": next_topic.id, "name": next_topic.name, "level": next_topic.level, "attributes": next_topic.attributes, "source": next_topic.source},
+        {
+            "topic_id": next_topic.id,
+            "name": next_topic.name,
+            "level": next_topic.level,
+            "attributes": next_topic.attributes,
+            "source": next_topic.source,
+            "suggested_question_type": suggest_question_type(next_topic),  # NEW
+        },
         ensure_ascii=False,
         indent=2,
     )
@@ -429,7 +493,7 @@ def patch_topic(
 
 @mcp.tool()
 def generate_plan() -> str:
-    """Generate the final review plan: priority list, daily schedule, and weak summary. Uses the priority function: importance + 0.8 × weakness. Call after diagnostic testing is complete."""
+    """Generate the final review plan: priority list, daily schedule, weak summary, and chapter progress. Uses the priority function: importance + 0.8 × weakness. Call after diagnostic testing is complete."""
     state = load_state()
     if state is None or not state.topics:
         return json.dumps({"error": "没有知识点。请先完成 setup + sync_topics。"})
@@ -443,9 +507,10 @@ def generate_plan() -> str:
         daily_hours=state.daily_hours,
         mode=getattr(state, "mode", "normal"),
         learning_order=state.learning_order,
+        practice_history=state.practice_history,
     )
 
-    save_state(state)
+    # NOTE: state is NOT saved — generate_plan is read-only
     return plan.model_dump_json(indent=2)
 
 
@@ -455,11 +520,13 @@ def generate_plan() -> str:
 @mcp.tool()
 def generate_review_doc(
     sort_by: Literal["chapter", "learning_order"] = "chapter",
+    format: Literal["detailed", "quickref"] = "detailed",
 ) -> str:
     """Generate a Markdown review document organized by chapter or learning order. Returns Markdown text for AI to present or save.
 
     Args:
         sort_by: "chapter" groups topics by chapter, "learning_order" follows topological sort order.
+        format: "detailed" (default) for full attribute listing, "quickref" for compact table format.
     """
     state = load_state()
     if state is None or not state.topics:
@@ -470,8 +537,58 @@ def generate_review_doc(
         practice_history=state.practice_history,
         learning_order=state.learning_order,
         sort_by=sort_by,
+        format=format,
     )
     return md
+
+
+# ─── Tool 7.5: generate_mistake_sheet ─────────────────────────────
+
+
+@mcp.tool()
+def generate_mistake_sheet() -> str:
+    """Generate a Markdown mistake review sheet from Q&A practice records. Only includes topics with 'weak' results that have question/user_answer/correct_answer data. Pure Markdown output (no JSON wrapper)."""
+    state = load_state()
+    if state is None or not state.topics:
+        return "还没有学习数据。请先完成 setup + sync_topics。"
+
+    # Filter practice records with Q&A data and weak result
+    mistakes = [
+        r for r in state.practice_history
+        if r.result == "weak" and r.question and r.user_answer and r.correct_answer
+    ]
+
+    if not mistakes:
+        return "暂无错题记录。需要在 record_answer 时传入 question/user_answer/correct_answer。"
+
+    # Build topic name lookup
+    id_to_name = {t.id: t.name for t in state.topics}
+
+    # Group by topic_id
+    grouped: dict[str, list] = defaultdict(list)
+    for rec in mistakes:
+        grouped[rec.topic_id].append(rec)
+
+    lines = ["# 错题集", ""]
+    for topic_id in sorted(grouped.keys()):
+        name = id_to_name.get(topic_id, topic_id)
+        lines.append(f"## {name}")
+        lines.append("")
+        for i, rec in enumerate(grouped[topic_id], 1):
+            q = (rec.question or "").replace("|", "\\|")
+            ua = (rec.user_answer or "").replace("|", "\\|")
+            ca = (rec.correct_answer or "").replace("|", "\\|")
+            lines.append(f"### 错题 {i}")
+            lines.append("")
+            lines.append(f"- **题目**: {q}")
+            lines.append(f"- **你的答案**: {ua}")
+            lines.append(f"- **正确答案**: {ca}")
+            lines.append(f"- **日期**: {rec.date}")
+            lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 # ─── Tool 8: get_question_bank ────────────────────────────────────
