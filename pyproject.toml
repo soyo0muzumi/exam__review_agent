@@ -1,6 +1,6 @@
 [project]
 name = "exam-review"
-version = "1.0.0"
+version = "2.0.0"
 description = "MCP Server for AI-powered exam review planning"
 requires-python = ">=3.10"
 dependencies = [
