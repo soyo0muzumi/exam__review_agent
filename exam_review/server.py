@@ -1,4 +1,4 @@
-"""MCP Server for exam review — 12 tools, minimal state, pure computation.
+"""MCP Server for exam review — 13 tools, minimal state, pure computation.
 
 Tools:
   0. switch_subject  — Switch to a subject-specific state directory
@@ -6,6 +6,7 @@ Tools:
   1. setup_review    — Initialize/reset state (exam date, hours, mode)
   2. parse_material  — Split text into chapter-based chunks (LLM extracts text first via pdf-mcp)
   3. sync_topics     — AI submits all knowledge points at once; tool scores + sorts
+  3.5 detect_knowledge_gaps — Compare current topics against expected syllabus
   4. record_answer   — Record diagnostic answer for a topic
   5. get_next_topic  — Get next untested A-level topic
   5.5 patch_topic    — Incrementally update a single topic
@@ -47,7 +48,8 @@ from .diagnostic import (
     get_a_level_topics,
     get_next_untested,
     get_next_for_retest,
-    suggest_question_type,  # NEW
+    suggest_question_type,
+    detect_knowledge_gaps as _detect_knowledge_gaps,
 )
 from .planner import generate_plan as _generate_plan
 from .planner import render_review_doc as _render_review_doc
@@ -68,7 +70,7 @@ Workflow:
   0. setup_review(exam_date, daily_hours, chapter_weights?)
   1. Use pdf-mcp's pdf_read_all to extract text from PDF
   2. parse_material(text) → chapters
-  3. sync_topics(topics) → scored topics + learning order
+  3. sync_topics(topics, material_id) → scored topics + learning order
   4. get_next_topic() → next A-level topic with suggested_question_type & attributes & source; AI asks question matching type; record_answer(result, question?, user_answer?, correct_answer?)
   5. generate_plan() → priority list + daily schedule + weak summary + chapter_progress
 
@@ -82,6 +84,7 @@ Present chapter_progress FIRST (ALEKS Pie), then priority_list.
 
 Additional tools:
   switch_subject(subject), list_subjects(), patch_topic(...),
+  detect_knowledge_gaps(expected_topics),
   generate_review_doc(sort_by?, format?), get_question_bank(topic_ids?),
   generate_mistake_sheet() → Markdown mistake review""",
 )
@@ -188,7 +191,7 @@ def parse_material(text: str) -> str:
 
 
 @mcp.tool()
-def sync_topics(topics: list[dict]) -> str:
+def sync_topics(topics: list[dict], material_id: str) -> str:
     """Submit all knowledge points at once. This is the ONLY way to set topics. AI identifies topics from parsed text, assigns levels, and lists dependencies. The tool auto-calculates importance and learning order. Calling again ADDS new topics and UPDATES metadata of existing ones (name, level, chapter, depends_on, attributes, source), but does NOT recompute importance of already-scored topics. Note: attributes and source are REPLACED on update, not merged — use patch_topic for incremental changes.
 
     Args:
@@ -208,6 +211,8 @@ def sync_topics(topics: list[dict]) -> str:
                                 textbook first, web_search with confirmation + attribution second,
                                 never fabricated.
               "distinctions"  — comparisons and disambiguations (易混淆概念对比)
+        material_id: Unique identifier for the source material (e.g. textbook title, course
+                     name). Tracked in each topic's material_sources list for gap detection.
     """
     state = load_state()
     if state is None:
@@ -244,6 +249,9 @@ def sync_topics(topics: list[dict]) -> str:
             # Update source only if provided and non-empty
             if t.get("source"):
                 existing.source = t["source"]
+            # Track material provenance
+            if material_id not in existing.material_sources:
+                existing.material_sources.append(material_id)
             updated += 1
         else:
             new_topics.append(
@@ -257,6 +265,7 @@ def sync_topics(topics: list[dict]) -> str:
                     depends_on=depends_on,
                     attributes=t.get("attributes", {}),
                     source=t.get("source", ""),
+                    material_sources=[material_id],
                 )
             )
             added += 1
@@ -280,6 +289,7 @@ def sync_topics(topics: list[dict]) -> str:
         {
             "added": added,
             "updated": updated,
+            "material_id": material_id,
             "topic_version": state.topic_version,
             "topics": [t.model_dump() for t in state.topics],
             "learning_order": state.learning_order,
@@ -287,6 +297,32 @@ def sync_topics(topics: list[dict]) -> str:
         ensure_ascii=False,
         indent=2,
     )
+
+
+# ─── Tool 3.5: detect_knowledge_gaps ───────────────────────────────
+
+
+@mcp.tool()
+def detect_knowledge_gaps(expected_topics: list[dict]) -> str:
+    """Detect gaps by comparing current topics against an expected topic list. AI provides the expected syllabus from LLM subject knowledge; tool returns structured diff.
+
+    Args:
+        expected_topics: List of expected topic dicts, each with "name" (required), optional "level" (A/B/C) and "chapter".
+
+    Returns JSON with missing, partial, present breakdown. Pure computation — no AI judgment.
+    """
+    state = load_state()
+    if state is None or not state.topics:
+        missing = [
+            {"name": et["name"], "level": et.get("level", "C"), "chapter": et.get("chapter", "")}
+            for et in expected_topics if et.get("name")
+        ]
+        return json.dumps({
+            "missing": missing, "partial": [], "present": 0,
+            "total_expected": len(expected_topics),
+        }, ensure_ascii=False, indent=2)
+    result = _detect_knowledge_gaps(state.topics, expected_topics)
+    return json.dumps(result, ensure_ascii=False, indent=2)
 
 
 # ─── Tool 4: record_answer ────────────────────────────────────

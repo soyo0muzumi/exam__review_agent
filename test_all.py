@@ -276,9 +276,10 @@ topics_input = [
     {"name": "梯度下降", "level": "A", "chapter": "第4章", "depends_on": ["线性回归"]},
     {"name": "正则化", "level": "B", "chapter": "第5章", "depends_on": ["线性回归"]},
 ]
-sync_result = json.loads(sync_topics(topics=topics_input))
+sync_result = json.loads(sync_topics(topics=topics_input, material_id="test-material"))
 assert sync_result["added"] == 4
 assert sync_result["updated"] == 0
+assert sync_result["material_id"] == "test-material"
 assert len(sync_result["learning_order"]) == 4
 # Verify attributes and source are stored
 topics_by_name = {t["name"]: t for t in sync_result["topics"]}
@@ -291,7 +292,7 @@ print(f"  sync_topics OK: added={sync_result['added']}, order={sync_result['lear
 sync_result2 = json.loads(sync_topics(topics=[
     {"name": "线性回归", "level": "A", "chapter": "第3章", "depends_on": ["统计基础"],
      "attributes": {"formulas": ["新公式"], "definitions": ["线性模型"]}, "source": "新的原文"},
-]))
+], material_id="test-material"))
 assert sync_result2["updated"] == 1
 updated_lr = next(t for t in sync_result2["topics"] if t["name"] == "线性回归")
 assert updated_lr["attributes"] == {"formulas": ["新公式"], "definitions": ["线性模型"]}  # replaced, not merged
@@ -307,7 +308,7 @@ conv_topic = {"name": "卷积码", "level": "B", "chapter": "第6章", "depends_
                   "distinctions": ["卷积码 vs 分组码：前者有记忆，后者无记忆"],
               },
               "source": "有记忆编码。Viterbi译码。广泛用于数字通信。"}
-sync_conv = json.loads(sync_topics(topics=[conv_topic]))
+sync_conv = json.loads(sync_topics(topics=[conv_topic], material_id="test-material"))
 assert sync_conv["added"] == 1
 conv_data = next(t for t in sync_conv["topics"] if t["name"] == "卷积码")
 assert conv_data["attributes"]["methods"] == ["Viterbi译码步骤：1.构建网格 2.计算路径度量 3.回溯"]
@@ -443,7 +444,7 @@ subj1_dir.mkdir(parents=True, exist_ok=True)
 setup_review(exam_date="2026-07-15", daily_hours=3, mode="normal")
 sync_topics(topics=[
     {"name": "微积分", "level": "A", "chapter": "第1章", "depends_on": []},
-])
+], material_id="高数课本")
 高数_next = json.loads(get_next_topic())
 assert 高数_next["name"] == "微积分"
 print("  高数 state OK")
@@ -456,7 +457,7 @@ subj2_dir.mkdir(parents=True, exist_ok=True)
 setup_review(exam_date="2026-07-20", daily_hours=2, mode="normal")
 sync_topics(topics=[
     {"name": "矩阵", "level": "A", "chapter": "第1章", "depends_on": []},
-])
+], material_id="线性代数课本")
 代数_next = json.loads(get_next_topic())
 assert 代数_next["name"] == "矩阵"
 print("  线性代数 state OK")
@@ -613,7 +614,7 @@ sync_topics(topics=[
      "attributes": {"formulas": ["β̂ = (X'X)⁻¹X'y"], "definitions": ["线性模型"], "distinctions": ["回归 vs 分类"]}},
     {"name": "梯度下降", "level": "A", "chapter": "第4章", "depends_on": ["线性回归"],
      "attributes": {"methods": ["1.初始化 2.计算梯度 3.更新参数"], "formulas": ["θ := θ - α∇J(θ)"]}},
-])
+], material_id="test-material")
 
 # get_next_topic includes suggested_question_type
 next_t = json.loads(get_next_topic())
