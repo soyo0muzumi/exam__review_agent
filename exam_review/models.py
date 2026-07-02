@@ -61,6 +61,7 @@ class ReviewState(BaseModel):
     learning_order: list[str] = Field(default_factory=list)
     tested_topic_ids: list[str] = Field(default_factory=list)
     practice_history: list[PracticeRecord] = Field(default_factory=list)
+    last_retest_topic_id: str | None = None
 
 
 class DailyPlanItem(BaseModel):

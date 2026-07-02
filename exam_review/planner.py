@@ -57,7 +57,7 @@ def generate_plan(
         )
 
     # chapter_progress — NEW
-    chapter_progress = _calc_chapter_progress(topics, learning_order)
+    chapter_progress = _calc_chapter_progress(topics)
 
     if mode == "quick":
         daily_schedule = []

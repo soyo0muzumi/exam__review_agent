@@ -89,7 +89,6 @@ def suggest_question_type(topic: Topic) -> str:
 
 def calculate_chapter_progress(
     topics: list[Topic],
-    learning_order: list[str] | None = None,
 ) -> list[ChapterProgress]:
     """Calculate per-chapter progress with ready_to_learn (ALEKS outer fringe).
 

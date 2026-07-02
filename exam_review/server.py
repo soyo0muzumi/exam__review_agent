@@ -1,4 +1,4 @@
-"""MCP Server for exam review — 11 tools, minimal state, pure computation.
+"""MCP Server for exam review — 12 tools, minimal state, pure computation.
 
 Tools:
   0. switch_subject  — Switch to a subject-specific state directory
@@ -373,7 +373,16 @@ def get_next_topic(
         next_topic = get_next_untested(state.topics, tested_ids, mode)
     else:
         # "all": return ANY weak/learning topic for re-testing, even if already tested
-        next_topic = get_next_for_retest(state.topics, set())
+        # Cycle protection: skip the last-returned topic to avoid infinite loops
+        candidates = set()
+        if state.last_retest_topic_id:
+            candidates = {t.id for t in state.topics if t.id != state.last_retest_topic_id}
+        next_topic = get_next_for_retest(state.topics, candidates)
+        if next_topic is None and state.last_retest_topic_id:
+            # Only the excluded topic remains — allow it
+            next_topic = get_next_for_retest(state.topics, set())
+        state.last_retest_topic_id = next_topic.id if next_topic else None
+        save_state(state)
 
     if next_topic is None:
         return json.dumps({"done": True, "message": "所有 A 级知识点已测试完毕。"})
@@ -520,7 +529,6 @@ def generate_mistake_sheet() -> str:
     id_to_name = {t.id: t.name for t in state.topics}
 
     # Group by topic_id
-    from collections import defaultdict
     grouped: dict[str, list] = defaultdict(list)
     for rec in mistakes:
         grouped[rec.topic_id].append(rec)
