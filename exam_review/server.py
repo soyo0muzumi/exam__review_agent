@@ -448,7 +448,7 @@ def patch_topic(
 
 @mcp.tool()
 def generate_plan() -> str:
-    """Generate the final review plan: priority list, daily schedule, and weak summary. Uses the priority function: importance + 0.8 × weakness. Call after diagnostic testing is complete."""
+    """Generate the final review plan: priority list, daily schedule, weak summary, and chapter progress. Uses the priority function: importance + 0.8 × weakness. Call after diagnostic testing is complete."""
     state = load_state()
     if state is None or not state.topics:
         return json.dumps({"error": "没有知识点。请先完成 setup + sync_topics。"})
